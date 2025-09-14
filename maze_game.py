@@ -125,9 +125,24 @@ class Player(FirstPersonController):
         self.speed = player_speed
         self.health = 100
         self.invulnerable_timer = 0
+        self.gravity = 0.5
+        self.jump_height = 2
+        self.grounded = True
     
     def update(self):
         super().update()
+        
+        # Safety check - prevent falling below the maze
+        if self.y < -5:
+            self.respawn()
+            print("Fell off the maze! Respawning...")
+        
+        # Keep player at reasonable height
+        if self.y < 0.5:
+            self.y = 0.5
+        
+        # Check collision with walls - prevent walking through them
+        self.check_wall_collision()
         
         # Check collision with lava
         self.check_lava_collision()
@@ -145,6 +160,18 @@ class Player(FirstPersonController):
         if self.invulnerable_timer > 0:
             self.invulnerable_timer -= time.dt
     
+    def check_wall_collision(self):
+        # Get current maze position
+        maze_x = int(self.position[0] / CELL_SIZE)
+        maze_z = int(self.position[2] / CELL_SIZE)
+        
+        # Check if current position is in a wall
+        if (0 <= maze_x < MAZE_SIZE and 0 <= maze_z < MAZE_SIZE and 
+            maze[maze_z][maze_x].cell_type == 'wall'):
+            # Move player back to previous safe position
+            self.position = (1 * CELL_SIZE, 1, 1 * CELL_SIZE)
+            print("Hit a wall! Moving to safe position.")
+    
     def check_lava_collision(self):
         maze_x = int(self.position[0] / CELL_SIZE)
         maze_z = int(self.position[2] / CELL_SIZE)
@@ -155,8 +182,17 @@ class Player(FirstPersonController):
             self.invulnerable_timer = 1.0  # 1 second of invulnerability
             print(f"Ouch! Lava damage! Health: {self.health}")
             
-            # Visual feedback
-            camera.shake(intensity=0.1, duration=0.3)
+            # Simple visual feedback - flash the screen red briefly
+            if hasattr(self, 'damage_flash'):
+                destroy(self.damage_flash)
+            self.damage_flash = Entity(
+                parent=camera.ui,
+                model='cube',
+                color=color.red,
+                scale=20,
+                alpha=0.3
+            )
+            destroy(self.damage_flash, delay=0.2)
             
             if self.health <= 0:
                 self.respawn()
@@ -169,16 +205,34 @@ class Player(FirstPersonController):
                 destroy(key)
                 keys_collected += 1
                 print(f"Key collected! {keys_collected}/{total_keys}")
-                # Visual feedback
-                camera.shake(intensity=0.05, duration=0.2)
+                
+                # Simple visual feedback - flash the screen yellow briefly
+                if hasattr(self, 'key_flash'):
+                    destroy(self.key_flash)
+                self.key_flash = Entity(
+                    parent=camera.ui,
+                    model='cube',
+                    color=color.yellow,
+                    scale=20,
+                    alpha=0.2
+                )
+                destroy(self.key_flash, delay=0.3)
     
     def check_goal_collision(self):
         global game_won
         if distance(self.position, goal.position) < 2 and keys_collected >= total_keys:
             game_won = True
             print("Congratulations! You won!")
-            # Victory animation
-            camera.animate_rotation((360, 0, 0), duration=2, curve=curve.in_out_expo)
+            
+            # Victory visual feedback - flash the screen green
+            victory_flash = Entity(
+                parent=camera.ui,
+                model='cube',
+                color=color.green,
+                scale=20,
+                alpha=0.3
+            )
+            destroy(victory_flash, delay=1.0)
     
     def handle_box_pushing(self):
         if held_keys['f']:  # Press F to push boxes
@@ -192,9 +246,10 @@ class Player(FirstPersonController):
                     break
     
     def respawn(self):
-        self.position = (1 * CELL_SIZE, 1, 1 * CELL_SIZE)
+        self.position = (1 * CELL_SIZE, 2, 1 * CELL_SIZE)  # Higher spawn position
         self.health = 100
-        print("Respawned!")
+        self.rotation = (0, 0, 0)  # Reset rotation
+        print("Respawned at safe location!")
 
 def generate_maze():
     # Create a simple maze with walls around the border and some internal structure
@@ -241,6 +296,20 @@ def create_maze(layout):
             cell = MazeCell(x, z, cell_type)
             maze_row.append(cell)
         maze.append(maze_row)
+    
+    # Add invisible barriers around the entire maze to prevent falling off
+    barrier_size = MAZE_SIZE * CELL_SIZE + 10
+    
+    # Create invisible floor under the entire maze
+    Entity(
+        model='cube',
+        color=color.clear,
+        position=(MAZE_SIZE * CELL_SIZE / 2, -10, MAZE_SIZE * CELL_SIZE / 2),
+        scale=(barrier_size, 1, barrier_size),
+        visible=False,
+        collider='box'
+    )
+    
     return maze
 
 def place_keys():
@@ -344,12 +413,18 @@ def input(key):
         # Restart game
         restart_game()
     
+    if key == 't':
+        # Teleport to safe position (emergency escape)
+        player.position = (1 * CELL_SIZE, 2, 1 * CELL_SIZE)
+        print("Emergency teleport to safe position!")
+    
     if key == 'h':
         # Show help
         print("Controls:")
         print("WASD - Move")
         print("Mouse - Look around")
         print("F - Push nearby boxes")
+        print("T - Emergency teleport to start")
         print("R - Restart (when dead or won)")
         print("ESC - Quit")
 
@@ -360,7 +435,8 @@ def restart_game():
     keys_collected = 0
     game_won = False
     player.health = 100
-    player.position = (1 * CELL_SIZE, 1, 1 * CELL_SIZE)
+    player.position = (1 * CELL_SIZE, 2, 1 * CELL_SIZE)  # Safe spawn height
+    player.rotation = (0, 0, 0)  # Reset rotation
     
     # Remove old keys and boxes
     for key in keys:
@@ -393,14 +469,14 @@ camera.rotation_x = -10
 
 # Create UI
 ui_text = Text(
-    f'Keys: {keys_collected}/{total_keys} | Health: {player.health} | F: Push Box | R: Restart',
+    f'Keys: {keys_collected}/{total_keys} | Health: {player.health} | F: Push | T: Teleport | R: Restart',
     position=(-0.85, 0.45),
     scale=1.5,
     color=color.white
 )
 
 def ui_update():
-    ui_text.text = f'Keys: {keys_collected}/{total_keys} | Health: {player.health} | F: Push Box | R: Restart'
+    ui_text.text = f'Keys: {keys_collected}/{total_keys} | Health: {player.health} | F: Push | T: Teleport | R: Restart'
     if game_won:
         ui_text.text += " | YOU WON!"
     elif player.health <= 0:
@@ -418,6 +494,7 @@ print("Welcome to the Maze Adventure!")
 print("Collect all keys to unlock the goal!")
 print("Avoid lava - it damages you!")
 print("Use F to push boxes around!")
+print("Press T for emergency teleport if you get stuck!")
 print("Press H for help")
 
 # Start the game
