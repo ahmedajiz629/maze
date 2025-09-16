@@ -1,0 +1,24 @@
+{
+  "name": "grid-puzzle-3d",
+  "version": "1.0.0",
+  "description": "3D grid-based puzzle game using Babylon.js and TypeScript",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "serve": "vite preview --port 8080",
+    "tsc": "tsc"
+  },
+  "devDependencies": {
+    "@babylonjs/core": "^7.0.0",
+    "@babylonjs/materials": "^7.0.0",
+    "@types/node": "^20.0.0",
+    "http-server": "^14.1.1",
+    "typescript": "^5.0.0",
+    "vite": "^7.1.5"
+  },
+  "dependencies": {
+    "babylonjs": "^7.0.0",
+    "babylonjs-materials": "^7.0.0"
+  }
+}
