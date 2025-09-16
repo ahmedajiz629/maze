@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<meta charset="utf-8" />
+<title>Grid Puzzle 3D (Babylon.js)</title>
+<style>
+  html,
+  body {
+    margin: 0;
+    height: 100%;
+    background: #181a1f;
+    color: #eee;
+    font-family: system-ui;
+  }
+  #hud {
+    position: fixed;
+    left: 12px;
+    top: 10px;
+    font-weight: 600;
+  }
+  #banner {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 8px;
+    text-align: center;
+  }
+</style>
+<div id="hud">Keys: 0</div>
+<div id="banner"></div>
+<canvas id="c"></canvas>
+
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+<script>
+  /* =================== CONFIG =================== */
+  const MAP = [
+    "####################",
+    "#S....#...........E#",
+    "#.##.#.#####.#######",
+    "#....#.....#.......#",
+    "###.###.#.#.###.#..#",
+    "#..B....#.#...#.#..#",
+    "#D#~#####.#.#.#.#..#",
+    "#...K.....#.#.#....#",
+    "#####.#####.#.####.#",
+    "#.....#.....#......#",
+    "#.###.#.###.#####..#",
+    "#.#...#...#.....#..#",
+    "#.#.#####.#####.#..#",
+    "#.#.......#...#.#..#",
+    "#.#######.#.#.#.#..#",
+    "#.....~...#.#.#....#",
+    "###.###.###.#.######",
+    "#.....#.....#......#",
+    "#.D...#.K...#..B...#",
+    "####################",
+  ];
+
+  const TILE = 2; // world units per grid cell
+  const FLOOR_Y = 0; // floor plane Y
+  const WALL_H = 2; // wall height
+  const MOVE_MS = 140; // move tween duration
+  const PUSH_MS = 120; // box push tween duration
+
+  /* ============== ENGINE & SCENE ============== */
+  const canvas = document.getElementById("c");
+  canvas.style.width = "100%";
+  canvas.style.height = "100%";
+  const engine = new BABYLON.Engine(canvas, true, {
+    preserveDrawingBuffer: true,
+    stencil: true,
+  });
+  const scene = new BABYLON.Scene(engine);
+  scene.clearColor = new BABYLON.Color4(0.1, 0.11, 0.12, 1);
+
+  const light = new BABYLON.HemisphericLight(
+    "h",
+    new BABYLON.Vector3(0, 1, 0),
+    scene
+  );
+  light.intensity = 0.85;
+
+  /* Camera: 3rd-person, gently tilted */
+  /* ===== Materials (simple, readable) ===== */
+  const matFloor = new BABYLON.GridMaterial("grid", scene);
+  matFloor.majorUnitFrequency = 1;
+  matFloor.minorUnitVisibility = 0;
+  matFloor.gridRatio = TILE;
+  matFloor.mainColor = new BABYLON.Color3(0.3, 0.33, 0.38);
+  matFloor.lineColor = new BABYLON.Color3(0.18, 0.2, 0.24);
+
+  const matWall = new BABYLON.StandardMaterial("wall", scene);
+  matWall.diffuseColor = new BABYLON.Color3(0.32, 0.34, 0.4);
+
+  const matBox = new BABYLON.StandardMaterial("box", scene);
+  matBox.diffuseColor = new BABYLON.Color3(0.63, 0.47, 0.35);
+
+  const matDoor = new BABYLON.StandardMaterial("door", scene);
+  matDoor.diffuseColor = new BABYLON.Color3(0.32, 0.65, 0.95);
+
+  const matKey = new BABYLON.StandardMaterial("key", scene);
+  matKey.emissiveColor = new BABYLON.Color3(1.0, 0.84, 0.0);
+
+  const matLava = new BABYLON.StandardMaterial("lava", scene);
+  matLava.emissiveColor = new BABYLON.Color3(0.88, 0.24, 0.18);
+
+  const matExit = new BABYLON.StandardMaterial("exit", scene);
+  matExit.emissiveColor = new BABYLON.Color3(0.35, 0.88, 0.42);
+
+  /* ===== Helpers ===== */
+  const W = MAP[0].length,
+    H = MAP.length;
+  const hud = document.getElementById("hud");
+  const banner = (msg) =>
+    (document.getElementById("banner").textContent = msg || "");
+
+  const cellToWorld = (i, j, y = 0) =>
+    new BABYLON.Vector3(i * TILE, y, j * TILE);
+  const keyOf = (i, j) => `${i},${j}`;
+
+  const blocked = new Set(); // walls, closed doors, boxes
+  const doors = new Map(); // cell -> mesh
+  const boxes = new Map(); // cell -> mesh
+  const keys = new Map(); // cell -> mesh
+  const lava = new Map(); // cells
+  let exitCell = null;
+  let spawnCell = null;
+
+  /* ===== Static geometry ===== */
+  const ground = BABYLON.MeshBuilder.CreateGround(
+    "floor",
+    { width: W * TILE, height: H * TILE, subdivisions: 2 },
+    scene
+  );
+  ground.material = matFloor;
+  ground.position = new BABYLON.Vector3(
+    ((W - 1) * TILE) / 2,
+    FLOOR_Y,
+    ((H - 1) * TILE) / 2
+  );
+
+  // Walls are instanced cubes for speed
+  const wallUnit = BABYLON.MeshBuilder.CreateBox(
+    "wallUnit",
+    { width: TILE, depth: TILE, height: WALL_H },
+    scene
+  );
+  wallUnit.material = matWall;
+  wallUnit.isVisible = false;
+
+  const boxUnit = BABYLON.MeshBuilder.CreateBox(
+    "boxUnit",
+    { width: TILE * 0.98, depth: TILE * 0.98, height: TILE * 0.98 },
+    scene
+  );
+  boxUnit.material = matBox;
+  boxUnit.isVisible = false;
+
+  const doorUnit = BABYLON.MeshBuilder.CreateBox(
+    "doorUnit",
+    { width: TILE, depth: TILE * 0.2, height: WALL_H },
+    scene
+  );
+  doorUnit.material = matDoor;
+  doorUnit.isVisible = false;
+
+  const keyUnit = BABYLON.MeshBuilder.CreateTorus(
+    "keyUnit",
+    { diameter: TILE * 0.6, thickness: TILE * 0.12, tessellation: 24 },
+    scene
+  );
+  keyUnit.material = matKey;
+  keyUnit.isVisible = false;
+
+  for (let j = 0; j < H; j++)
+    for (let i = 0; i < W; i++) {
+      const ch = MAP[j][i];
+      const p = cellToWorld(i, j);
+      if (ch === "#") {
+        const inst = wallUnit.createInstance(`w_${i}_${j}`);
+        inst.position = p.add(new BABYLON.Vector3(0, WALL_H / 2, 0));
+        blocked.add(keyOf(i, j));
+      } else if (ch === "B") {
+        const inst = boxUnit.createInstance(`b_${i}_${j}`);
+        inst.position = p.add(new BABYLON.Vector3(0, TILE * 0.49, 0));
+        boxes.set(keyOf(i, j), inst);
+        blocked.add(keyOf(i, j));
+      } else if (ch === "D") {
+        const inst = doorUnit.createInstance(`d_${i}_${j}`);
+        inst.position = p.add(new BABYLON.Vector3(0, WALL_H / 2, 0));
+        doors.set(keyOf(i, j), inst);
+        blocked.add(keyOf(i, j));
+      } else if (ch === "K") {
+        const inst = keyUnit.createInstance(`k_${i}_${j}`);
+        inst.position = p.add(new BABYLON.Vector3(0, TILE * 0.35, 0));
+        keys.set(keyOf(i, j), inst);
+      } else if (ch === "~") {
+        const plate = BABYLON.MeshBuilder.CreateBox(
+          `lava_${i}_${j}`,
+          { width: TILE, depth: TILE, height: 0.06 },
+          scene
+        );
+        plate.material = matLava;
+        plate.position = p.add(new BABYLON.Vector3(0, 0.03, 0));
+        lava.set(keyOf(i, j), plate);
+      } else if (ch === "E") {
+        const plate = BABYLON.MeshBuilder.CreateBox(
+          `exit_${i}_${j}`,
+          { width: TILE, depth: TILE, height: 0.06 },
+          scene
+        );
+        plate.material = matExit;
+        plate.position = p.add(new BABYLON.Vector3(0, 0.03, 0));
+        exitCell = [i, j];
+      } else if (ch === "S") {
+        spawnCell = [i, j];
+      }
+    }
+  if (!spawnCell || !exitCell) {
+    throw new Error("Map must include S and E.");
+  }
+
+  /* ===== Player (capsule with simple “walk” anim) ===== */
+  const player = BABYLON.MeshBuilder.CreateCapsule(
+    "player",
+    { height: 1.6, radius: 0.35, tessellation: 24 },
+    scene
+  );
+  player.material = new BABYLON.StandardMaterial("pm", scene);
+  player.material.diffuseColor = new BABYLON.Color3(1.0, 0.2, 0.55);
+
+const cam = new BABYLON.ArcFollowCamera("cam",
+  -Math.PI/2, 1.05, 26, player, scene);
+cam.attachControl(canvas, true);
+cam.wheelPrecision = 40;                   // keep your zoom speed
+
+
+  let px = spawnCell[0],
+    py = spawnCell[1];
+  function placePlayer(i, j) {
+    player.position = cellToWorld(i, j, TILE * 0.5);
+    cam.setTarget(player.position);
+  }
+  placePlayer(px, py);
+  let moving = false;
+  let keysCount = 0;
+  const setHUD = () => (hud.textContent = `Keys: ${keysCount}`);
+
+  /* ===== Utilities ===== */
+  function inBounds(i, j) {
+    return i >= 0 && j >= 0 && i < W && j < H;
+  }
+  function isBlocked(i, j) {
+    return blocked.has(keyOf(i, j));
+  }
+  function tweenPosition(mesh, to, ms, onDone) {
+    const from = mesh.position.clone();
+    const t0 = performance.now();
+    scene.onBeforeRenderObservable.add(function cb() {
+      const t = (performance.now() - t0) / ms;
+      const k = t >= 1 ? 1 : t;
+      // simple ease-in-out + walk bob for player
+      const s = 0.5 - 0.5 * Math.cos(Math.PI * k);
+      mesh.position = BABYLON.Vector3.Lerp(from, to, s);
+      if (mesh === player) {
+        mesh.rotation.y = Math.atan2(to.x - from.x, to.z - from.z); // face move dir
+        mesh.position.y =
+          TILE * 0.5 + (moving ? 0.05 * Math.sin(10 * Math.PI * k) : 0); // bob
+      }
+      if (k >= 1) {
+        scene.onBeforeRenderObservable.removeCallback(cb);
+        onDone && onDone();
+      }
+    });
+  }
+
+  /* ===== Input / Rules ===== */
+  window.addEventListener("keydown", (e) => {
+    if (moving) return;
+    const K = e.key.toLowerCase();
+    let dx = 0,
+      dy = 0;
+    if (player.isDisposed() || K === "r") {
+      // reset
+      
+      px = spawnCell[0];
+      py = spawnCell[1];
+      placePlayer(px, py);
+      banner("");
+      keysCount = 0;
+      setHUD();
+      return;
+    } else if (K === "arrowleft" || K === "q") dx = -1;
+    else if (K === "arrowright" || K === "d") dx = 1;
+    else if (K === "arrowup" || K === "z") dy = 1;
+    else if (K === "arrowdown" || K === "s") dy = -1;
+    else return;
+
+    const nx = px + dx,
+      ny = py + dy;
+    if (!inBounds(nx, ny)) return;
+
+    const here = keyOf(px, py),
+      there = keyOf(nx, ny);
+
+    // Door handling (attempting to enter a door consumes a key and opens it)
+    if (doors.has(there)) {
+      if (keysCount > 0) {
+        keysCount--;
+        setHUD();
+        doors.get(there).dispose();
+        doors.delete(there);
+        blocked.delete(there);
+      } else {
+        return;
+      } // blocked
+    }
+
+    // Box push
+    if (boxes.has(there)) {
+      const bx = nx + dx,
+        by = ny + dy,
+        bkey = keyOf(bx, by);
+      if (!inBounds(bx, by) || isBlocked(bx, by)) return;
+      lava.get(bkey)?.dispose()
+      lava.delete(bkey)
+      const box = boxes.get(there);
+      boxes.delete(there);
+      blocked.delete(there);
+      boxes.set(bkey, box);
+      blocked.add(bkey);
+      moving = true;
+      tweenPosition(box, cellToWorld(bx, by, TILE * 0.49), PUSH_MS, () => {});
+    }
+
+    // Final pass: if still blocked, stop
+    if (isBlocked(nx, ny)) return;
+
+    // Move player
+    moving = true;
+    tweenPosition(player, cellToWorld(nx, ny, TILE * 0.5), MOVE_MS, () => {
+      px = nx;
+      py = ny;
+      moving = false;
+      cam.setTarget(player.position);
+
+      // Key pickup
+      const kkey = keyOf(px, py);
+      if (keys.has(kkey)) {
+        keys.get(kkey).dispose();
+        keys.delete(kkey);
+        keysCount++;
+        setHUD();
+      }
+      // Lava
+      if (lava.has(kkey)) {
+        banner("You fell in lava. Press R to respawn.");
+        player.dispose()
+      } else banner("");
+      // Exit
+      if (px === exitCell[0] && py === exitCell[1]) {
+        banner("You win! Press R to play again.");
+      }
+    });
+  });
+
+  /* ===== Spin keys for readability ===== */
+  scene.onBeforeRenderObservable.add(() => {
+    const t = performance.now() * 0.001;
+    for (const m of keys.values()) m.rotation.y = t;
+  });
+
+  /* ===== Start ===== */
+  engine.runRenderLoop(() => scene.render());
+  window.addEventListener("resize", () => engine.resize());
+  setHUD();
+</script>
