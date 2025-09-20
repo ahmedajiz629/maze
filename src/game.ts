@@ -32,8 +32,8 @@ class GridPuzzle3D {
   private readonly MAP = [
     "####################",
     "#S....#...........E#",
-    "#.##.#.#####.#######",
-    "#....#.....#.......#",
+    "#~##.#.#####.#######",
+    "#~...#.....#.......#",
     "###.###.#.#.###.#..#",
     "#..B....#.#...#.#..#",
     "#D#~#####.#.#.#.#..#",
@@ -279,9 +279,61 @@ class GridPuzzle3D {
   }
 
   private createKey(i: number, j: number, p: Vector3): void {
-    const inst = this.keyUnit.createInstance(`k_${i}_${j}`);
-    inst.position = p.add(new Vector3(0, this.TILE * 0.35, 0));
-    this.keys.set(this.keyOf(i, j), inst);
+    // Create a more realistic key instead of a simple torus
+    const keyGroup = this.createRealisticKey(i, j);
+    keyGroup.position = p.add(new Vector3(0, this.TILE * 0.5, 0)); // Raise it higher to be more visible
+    this.keys.set(this.keyOf(i, j), keyGroup);
+  }
+
+  private createRealisticKey(i: number, j: number): Mesh {
+    const keyGroup = new Mesh(`keyGroup_${i}_${j}`, this.scene);
+    
+    // Key head (circular part)
+    const keyHead = MeshBuilder.CreateTorus(
+      `keyHead_${i}_${j}`,
+      { diameter: this.TILE * 0.4, thickness: this.TILE * 0.08, tessellation: 16 },
+      this.scene
+    );
+    keyHead.position.y = 0;
+    keyHead.parent = keyGroup;
+    
+    // Key shaft
+    const keyShaft = MeshBuilder.CreateBox(
+      `keyShaft_${i}_${j}`,
+      { width: 0.05, height: this.TILE * 0.3, depth: 0.05 },
+      this.scene
+    );
+    keyShaft.position = new Vector3(0, -this.TILE * 0.15, 0);
+    keyShaft.parent = keyGroup;
+    
+    // Key teeth
+    const tooth1 = MeshBuilder.CreateBox(
+      `keyTooth1_${i}_${j}`,
+      { width: 0.03, height: 0.08, depth: 0.08 },
+      this.scene
+    );
+    tooth1.position = new Vector3(0.04, -this.TILE * 0.25, 0);
+    tooth1.parent = keyGroup;
+    
+    const tooth2 = MeshBuilder.CreateBox(
+      `keyTooth2_${i}_${j}`,
+      { width: 0.03, height: 0.06, depth: 0.06 },
+      this.scene
+    );
+    tooth2.position = new Vector3(0.04, -this.TILE * 0.2, 0);
+    tooth2.parent = keyGroup;
+
+    // Apply golden material
+    const keyMaterial = new StandardMaterial(`keyMat_${i}_${j}`, this.scene);
+    keyMaterial.emissiveColor = new Color3(1.0, 0.84, 0.0); // Bright gold
+    keyMaterial.diffuseColor = new Color3(0.8, 0.7, 0.2); // Darker gold base
+    
+    keyHead.material = keyMaterial;
+    keyShaft.material = keyMaterial;
+    tooth1.material = keyMaterial;
+    tooth2.material = keyMaterial;
+
+    return keyGroup;
   }
 
   private createLava(i: number, j: number, p: Vector3): void {
@@ -323,15 +375,6 @@ class GridPuzzle3D {
       bubbles.push(bubble);
     }
     
-    // Create glowing edge effect
-    const lavaEdge = MeshBuilder.CreateTorus(
-      `lavaEdge_${i}_${j}`,
-      { diameter: this.TILE * 0.9, thickness: 0.08, tessellation: 32 },
-      this.scene
-    );
-    lavaEdge.position.y = 0.02;
-    lavaEdge.parent = lavaGroup;
-    
     // Enhanced lava material with animation
     const lavaMaterial = new StandardMaterial(`lavaPoolMat_${i}_${j}`, this.scene);
     lavaMaterial.diffuseColor = new Color3(0.9, 0.2, 0.1); // Bright red-orange
@@ -343,13 +386,7 @@ class GridPuzzle3D {
     bubbleMaterial.diffuseColor = new Color3(1.0, 0.5, 0.1); // Hot orange
     bubbleMaterial.emissiveColor = new Color3(1.0, 0.6, 0.2); // Very glowing
     
-    // Edge material - even brighter
-    const edgeMaterial = new StandardMaterial(`lavaEdgeMat_${i}_${j}`, this.scene);
-    edgeMaterial.diffuseColor = new Color3(1.0, 0.8, 0.2); // Yellow-hot
-    edgeMaterial.emissiveColor = new Color3(1.0, 0.7, 0.3); // Very bright glow
-    
     lavaPool.material = lavaMaterial;
-    lavaEdge.material = edgeMaterial;
     bubbles.forEach(bubble => bubble.material = bubbleMaterial);
     
     // Add bubbling animation
@@ -379,14 +416,6 @@ class GridPuzzle3D {
         1.0 * glowIntensity,
         0.4 * glowIntensity,
         0.1 * glowIntensity
-      );
-      
-      // Make the edge glow pulse differently
-      const edgeGlow = 0.7 + 0.4 * Math.sin(time * 3);
-      edgeMaterial.emissiveColor = new Color3(
-        1.0 * edgeGlow,
-        0.7 * edgeGlow,
-        0.3 * edgeGlow
       );
     });
     
@@ -632,11 +661,16 @@ class GridPuzzle3D {
   private initInput(): void {
     window.addEventListener("keydown", (e) => this.handleKeyDown(e));
 
-    // Animate keys
+    // Animate keys (floating and rotating)
     this.scene.onBeforeRenderObservable.add(() => {
       const t = performance.now() * 0.001;
-      for (const mesh of this.keys.values()) {
-        mesh.rotation.y = t;
+      for (const keyGroup of this.keys.values()) {
+        // Rotate the key
+        keyGroup.rotation.y = t * 2;
+        // Add floating motion
+        const baseY = this.TILE * 0.5;
+        const float = Math.sin(t * 3) * 0.1;
+        keyGroup.position.y = baseY + float;
       }
     });
   }
@@ -790,10 +824,7 @@ class GridPuzzle3D {
     if (this.player.mesh.isDisposed()) {
       const playerMesh = this.createRealisticPlayer();
       this.player.mesh = playerMesh;
-      
-      // Update camera to follow the new player mesh by updating target
-      // ArcFollowCamera should automatically follow the new mesh
-      (this.camera as any).target = playerMesh;
+      this.camera.setMeshTarget(playerMesh); // Update camera target
     }
 
     this.placePlayer(this.player.x, this.player.y);
