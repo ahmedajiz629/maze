@@ -285,24 +285,209 @@ class GridPuzzle3D {
   }
 
   private createLava(i: number, j: number, p: Vector3): void {
-    const plate = MeshBuilder.CreateBox(
-      `lava_${i}_${j}`,
-      { width: this.TILE, depth: this.TILE, height: 0.06 },
+    const lavaGroup = this.createRealisticLava(i, j);
+    lavaGroup.position = p.add(new Vector3(0, 0.1, 0));
+    this.lava.set(this.keyOf(i, j), lavaGroup);
+  }
+
+  private createRealisticLava(i: number, j: number): Mesh {
+    const lavaGroup = new Mesh(`lavaGroup_${i}_${j}`, this.scene);
+    
+    // Main lava pool (slightly depressed)
+    const lavaPool = MeshBuilder.CreateBox(
+      `lavaPool_${i}_${j}`,
+      { width: this.TILE * 0.95, depth: this.TILE * 0.95, height: 0.15 },
       this.scene
     );
-    plate.material = this.matLava;
-    plate.position = p.add(new Vector3(0, 0.03, 0));
-    this.lava.set(this.keyOf(i, j), plate);
+    lavaPool.position.y = -0.05;
+    lavaPool.parent = lavaGroup;
+    
+    // Create multiple bubbling spheres for realistic effect
+    const bubbleCount = 5;
+    const bubbles: Mesh[] = [];
+    
+    for (let b = 0; b < bubbleCount; b++) {
+      const bubble = MeshBuilder.CreateSphere(
+        `lavaBubble_${i}_${j}_${b}`,
+        { diameter: 0.1 + Math.random() * 0.2 },
+        this.scene
+      );
+      
+      // Random position within the lava pool
+      bubble.position = new Vector3(
+        (Math.random() - 0.5) * this.TILE * 0.8,
+        Math.random() * 0.05,
+        (Math.random() - 0.5) * this.TILE * 0.8
+      );
+      bubble.parent = lavaGroup;
+      bubbles.push(bubble);
+    }
+    
+    // Create glowing edge effect
+    const lavaEdge = MeshBuilder.CreateTorus(
+      `lavaEdge_${i}_${j}`,
+      { diameter: this.TILE * 0.9, thickness: 0.08, tessellation: 32 },
+      this.scene
+    );
+    lavaEdge.position.y = 0.02;
+    lavaEdge.parent = lavaGroup;
+    
+    // Enhanced lava material with animation
+    const lavaMaterial = new StandardMaterial(`lavaPoolMat_${i}_${j}`, this.scene);
+    lavaMaterial.diffuseColor = new Color3(0.9, 0.2, 0.1); // Bright red-orange
+    lavaMaterial.emissiveColor = new Color3(1.0, 0.4, 0.1); // Glowing effect
+    lavaMaterial.specularColor = new Color3(1.0, 0.6, 0.2); // Shiny surface
+    
+    // Bubble material - more yellow-orange for heat
+    const bubbleMaterial = new StandardMaterial(`lavaBubbleMat_${i}_${j}`, this.scene);
+    bubbleMaterial.diffuseColor = new Color3(1.0, 0.5, 0.1); // Hot orange
+    bubbleMaterial.emissiveColor = new Color3(1.0, 0.6, 0.2); // Very glowing
+    
+    // Edge material - even brighter
+    const edgeMaterial = new StandardMaterial(`lavaEdgeMat_${i}_${j}`, this.scene);
+    edgeMaterial.diffuseColor = new Color3(1.0, 0.8, 0.2); // Yellow-hot
+    edgeMaterial.emissiveColor = new Color3(1.0, 0.7, 0.3); // Very bright glow
+    
+    lavaPool.material = lavaMaterial;
+    lavaEdge.material = edgeMaterial;
+    bubbles.forEach(bubble => bubble.material = bubbleMaterial);
+    
+    // Add bubbling animation
+    this.scene.onBeforeRenderObservable.add(() => {
+      const time = performance.now() * 0.001;
+      
+      // Animate bubbles - make them bob up and down at different rates
+      bubbles.forEach((bubble, index) => {
+        const speed = 1.5 + index * 0.3;
+        const amplitude = 0.03 + index * 0.01;
+        bubble.position.y = Math.abs(Math.sin(time * speed)) * amplitude;
+        
+        // Slight horizontal movement for more realism
+        const originalX = (Math.random() - 0.5) * this.TILE * 0.8;
+        const originalZ = (Math.random() - 0.5) * this.TILE * 0.8;
+        bubble.position.x = originalX + Math.sin(time * speed * 0.5) * 0.02;
+        bubble.position.z = originalZ + Math.cos(time * speed * 0.7) * 0.02;
+        
+        // Scale bubbles to simulate popping and reforming
+        const scale = 0.8 + 0.4 * Math.abs(Math.sin(time * speed * 1.5));
+        bubble.scaling = new Vector3(scale, scale, scale);
+      });
+      
+      // Make the main pool glow pulse
+      const glowIntensity = 0.8 + 0.3 * Math.sin(time * 2);
+      lavaMaterial.emissiveColor = new Color3(
+        1.0 * glowIntensity,
+        0.4 * glowIntensity,
+        0.1 * glowIntensity
+      );
+      
+      // Make the edge glow pulse differently
+      const edgeGlow = 0.7 + 0.4 * Math.sin(time * 3);
+      edgeMaterial.emissiveColor = new Color3(
+        1.0 * edgeGlow,
+        0.7 * edgeGlow,
+        0.3 * edgeGlow
+      );
+    });
+    
+    return lavaGroup;
   }
 
   private createExit(i: number, j: number, p: Vector3): void {
-    const plate = MeshBuilder.CreateBox(
-      `exit_${i}_${j}`,
-      { width: this.TILE, depth: this.TILE, height: 0.06 },
+    const exitGroup = this.createRealisticExit(i, j);
+    exitGroup.position = p.add(new Vector3(0, 0.1, 0));
+  }
+
+  private createRealisticExit(i: number, j: number): Mesh {
+    const exitGroup = new Mesh(`exitGroup_${i}_${j}`, this.scene);
+    
+    // Main exit platform
+    const exitPlatform = MeshBuilder.CreateBox(
+      `exitPlatform_${i}_${j}`,
+      { width: this.TILE * 0.9, depth: this.TILE * 0.9, height: 0.1 },
       this.scene
     );
-    plate.material = this.matExit;
-    plate.position = p.add(new Vector3(0, 0.03, 0));
+    exitPlatform.position.y = 0;
+    exitPlatform.parent = exitGroup;
+    
+    // Glowing border
+    const exitBorder = MeshBuilder.CreateTorus(
+      `exitBorder_${i}_${j}`,
+      { diameter: this.TILE * 0.85, thickness: 0.05, tessellation: 32 },
+      this.scene
+    );
+    exitBorder.position.y = 0.08;
+    exitBorder.parent = exitGroup;
+    
+    // Central glowing orb
+    const exitOrb = MeshBuilder.CreateSphere(
+      `exitOrb_${i}_${j}`,
+      { diameter: 0.4 },
+      this.scene
+    );
+    exitOrb.position.y = 0.25;
+    exitOrb.parent = exitGroup;
+    
+    // Floating rings around the orb
+    const ring1 = MeshBuilder.CreateTorus(
+      `exitRing1_${i}_${j}`,
+      { diameter: 0.6, thickness: 0.02, tessellation: 24 },
+      this.scene
+    );
+    ring1.position.y = 0.25;
+    ring1.parent = exitGroup;
+    
+    const ring2 = MeshBuilder.CreateTorus(
+      `exitRing2_${i}_${j}`,
+      { diameter: 0.8, thickness: 0.015, tessellation: 24 },
+      this.scene
+    );
+    ring2.position.y = 0.25;
+    ring2.parent = exitGroup;
+    
+    // Materials
+    const exitMaterial = new StandardMaterial(`exitMat_${i}_${j}`, this.scene);
+    exitMaterial.diffuseColor = new Color3(0.2, 0.8, 0.3); // Green
+    exitMaterial.emissiveColor = new Color3(0.3, 0.9, 0.4); // Glowing green
+    
+    const orbMaterial = new StandardMaterial(`exitOrbMat_${i}_${j}`, this.scene);
+    orbMaterial.diffuseColor = new Color3(0.4, 1.0, 0.5); // Bright green
+    orbMaterial.emissiveColor = new Color3(0.6, 1.0, 0.7); // Very bright glow
+    
+    const ringMaterial = new StandardMaterial(`exitRingMat_${i}_${j}`, this.scene);
+    ringMaterial.diffuseColor = new Color3(0.8, 1.0, 0.8); // Light green
+    ringMaterial.emissiveColor = new Color3(0.5, 1.0, 0.6); // Bright glow
+    ringMaterial.alpha = 0.7; // Semi-transparent
+    
+    exitPlatform.material = exitMaterial;
+    exitBorder.material = exitMaterial;
+    exitOrb.material = orbMaterial;
+    ring1.material = ringMaterial;
+    ring2.material = ringMaterial;
+    
+    // Animation
+    this.scene.onBeforeRenderObservable.add(() => {
+      const time = performance.now() * 0.001;
+      
+      // Rotate rings in opposite directions
+      ring1.rotation.y = time * 0.8;
+      ring2.rotation.y = -time * 1.2;
+      ring1.rotation.x = Math.sin(time * 0.5) * 0.2;
+      ring2.rotation.x = Math.cos(time * 0.7) * 0.15;
+      
+      // Bob the orb up and down
+      exitOrb.position.y = 0.25 + Math.sin(time * 2) * 0.05;
+      
+      // Pulsing glow effect
+      const glowIntensity = 0.8 + 0.4 * Math.sin(time * 3);
+      orbMaterial.emissiveColor = new Color3(
+        0.6 * glowIntensity,
+        1.0 * glowIntensity,
+        0.7 * glowIntensity
+      );
+    });
+    
+    return exitGroup;
   }
 
   private initPlayer(): void {
