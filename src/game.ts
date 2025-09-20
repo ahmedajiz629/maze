@@ -118,10 +118,21 @@ class GridPuzzle3D {
     this.initMaterials();
     this.initGeometry();
     this.initMap();
-    this.initPlayer();
-    this.initCamera();
-    this.initInput();
-    this.start();
+    // Player, camera, and input initialization are now async
+    this.initializeAsync();
+  }
+
+  private async initializeAsync(): Promise<void> {
+    try {
+      await this.initPlayer();
+      this.initCamera();
+      this.initInput();
+      this.start();
+      this.showBanner("Player loaded! Use arrow keys or WASD to move.");
+    } catch (error) {
+      console.error("Failed to initialize player:", error);
+      this.showBanner("Player loading failed, using fallback.");
+    }
   }
 
   private initEngine(): void {
@@ -534,9 +545,9 @@ class GridPuzzle3D {
     return exitGroup;
   }
 
-  private initPlayer(): void {
+  private async initPlayer(): Promise<void> {
     // Create a more realistic player character with directional features
-    const playerMesh = this.playerFactory.createRealisticPlayer();
+    const playerMesh = await this.playerFactory.createRealisticPlayer();
     
     this.player = {
       x: this.spawnCell.x,
@@ -588,7 +599,10 @@ class GridPuzzle3D {
     let dx = 0, dy = 0;
 
     if (this.player.mesh.isDisposed() || key === "r") {
-      this.resetGame();
+      this.resetGame().catch(error => {
+        console.error("Failed to reset game:", error);
+        this.showBanner("Reset failed - please refresh the page");
+      });
       return;
     }
 
@@ -731,7 +745,7 @@ class GridPuzzle3D {
     this.showBanner("");
   }
 
-  private resetGame(): void {
+  private async resetGame(): Promise<void> {
     // Reset player position
     this.player.x = this.spawnCell.x;
     this.player.y = this.spawnCell.y;
@@ -740,7 +754,7 @@ class GridPuzzle3D {
 
     // Recreate player mesh if disposed
     if (this.player.mesh.isDisposed()) {
-      const playerMesh = this.playerFactory.createRealisticPlayer();
+      const playerMesh = await this.playerFactory.createRealisticPlayer();
       this.player.mesh = playerMesh;
       this.camera.setMeshTarget(playerMesh); // Update camera target
     }

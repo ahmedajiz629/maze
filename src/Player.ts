@@ -4,16 +4,21 @@ import {
   MeshBuilder,
   StandardMaterial,
   Color3,
-  Vector3
+  Vector3,
+  SceneLoader,
+  AbstractMesh,
+  AnimationGroup
 } from "@babylonjs/core";
+import "@babylonjs/loaders/glTF";
 
 export interface Player {
   x: number;
   y: number;
   keys: number;
   keysByColor: Map<string, number>; // Track keys by color
-  mesh: Mesh;
+  mesh: AbstractMesh;
   moving: boolean;
+  animationGroups?: AnimationGroup[]; // Store animations if available
 }
 
 export class PlayerFactory {
@@ -23,113 +28,167 @@ export class PlayerFactory {
     this.scene = scene;
   }
 
-  createRealisticPlayer(): Mesh {
-    // Create a compound player mesh with body parts
+  // Try to load external asset first, fallback to procedural if needed
+  async createRealisticPlayer(): Promise<AbstractMesh> {
+    // List of publicly available 3D assets to try
+    const assetUrls = [
+      // Khronos glTF sample models (guaranteed to work)
+      "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMan/glTF/CesiumMan.gltf",
+      // Simple character from Three.js examples
+      "https://threejs.org/examples/models/gltf/RobotExpressive/RobotExpressive.glb",
+      // Mixamo character (if available)
+      "./assets/models/character.glb",
+      // Local fallback
+      "./models/player.glb"
+    ];
+
+    for (const assetUrl of assetUrls) {
+      try {
+        const playerMesh = await this.loadExternalPlayerAsset(assetUrl);
+        console.log("Successfully loaded player from:", assetUrl);
+        return playerMesh;
+      } catch (error) {
+        console.log("Failed to load from:", assetUrl, "- trying next option");
+        continue;
+      }
+    }
+
+    // If all external assets failed, create procedural player
+    console.log("All external assets failed, using procedural player");
+    return this.createProceduralPlayer();
+  }
+
+  // Procedural player creation as fallback
+  private createProceduralPlayer(): AbstractMesh {
     const playerGroup = new Mesh("playerGroup", this.scene);
     
-    // Body (main torso)
-    const body = MeshBuilder.CreateBox(
+    // Main body - using a capsule for a more modern look
+    const body = MeshBuilder.CreateCapsule(
       "playerBody",
-      { width: 0.6, height: 1.2, depth: 0.4 },
+      { radius: 0.3, height: 1.2, subdivisions: 16 },
       this.scene
     );
-    body.position.y = 0.6; // Center the body
+    body.position.y = 0.6;
     body.parent = playerGroup;
     
-    // Head
+    // Head - sphere with better proportions
     const head = MeshBuilder.CreateSphere(
       "playerHead",
-      { diameter: 0.4 },
+      { diameter: 0.5, segments: 16 },
       this.scene
     );
-    head.position.y = 1.4; // On top of body
+    head.position.y = 1.4;
     head.parent = playerGroup;
     
-    // Eyes (to show direction)
-    const leftEye = MeshBuilder.CreateSphere(
-      "leftEye",
-      { diameter: 0.08 },
+    // Direction indicator - simple but effective
+    const eyeStripe = MeshBuilder.CreateBox(
+      "eyeStripe",
+      { width: 0.4, height: 0.08, depth: 0.06 },
       this.scene
     );
-    leftEye.position = new Vector3(-0.1, 1.45, 0.15);
-    leftEye.parent = playerGroup;
-    
-    const rightEye = MeshBuilder.CreateSphere(
-      "rightEye",
-      { diameter: 0.08 },
-      this.scene
-    );
-    rightEye.position = new Vector3(0.1, 1.45, 0.15);
-    rightEye.parent = playerGroup;
-    
-    // Nose (pointing forward to show direction)
-    const nose = MeshBuilder.CreateBox(
-      "nose",
-      { width: 0.06, height: 0.06, depth: 0.12 },
-      this.scene
-    );
-    nose.position = new Vector3(0, 1.4, 0.2);
-    nose.parent = playerGroup;
-    
-    // Arms
-    const leftArm = MeshBuilder.CreateBox(
+    eyeStripe.position = new Vector3(0, 1.45, 0.22);
+    eyeStripe.parent = playerGroup;
+
+    // Arms - using cylinders for smoother appearance
+    const leftArm = MeshBuilder.CreateCylinder(
       "leftArm",
-      { width: 0.2, height: 0.8, depth: 0.2 },
+      { height: 0.8, diameter: 0.15 },
       this.scene
     );
-    leftArm.position = new Vector3(-0.5, 0.8, 0);
+    leftArm.position = new Vector3(-0.45, 0.8, 0);
     leftArm.parent = playerGroup;
     
-    const rightArm = MeshBuilder.CreateBox(
+    const rightArm = MeshBuilder.CreateCylinder(
       "rightArm",
-      { width: 0.2, height: 0.8, depth: 0.2 },
+      { height: 0.8, diameter: 0.15 },
       this.scene
     );
-    rightArm.position = new Vector3(0.5, 0.8, 0);
+    rightArm.position = new Vector3(0.45, 0.8, 0);
     rightArm.parent = playerGroup;
     
-    // Legs
-    const leftLeg = MeshBuilder.CreateBox(
+    // Legs - using cylinders for smoother appearance
+    const leftLeg = MeshBuilder.CreateCylinder(
       "leftLeg",
-      { width: 0.25, height: 0.8, depth: 0.25 },
+      { height: 0.9, diameter: 0.18 },
       this.scene
     );
-    leftLeg.position = new Vector3(-0.15, -0.4, 0);
+    leftLeg.position = new Vector3(-0.15, -0.45, 0);
     leftLeg.parent = playerGroup;
     
-    const rightLeg = MeshBuilder.CreateBox(
+    const rightLeg = MeshBuilder.CreateCylinder(
       "rightLeg",
-      { width: 0.25, height: 0.8, depth: 0.25 },
+      { height: 0.9, diameter: 0.18 },
       this.scene
     );
-    rightLeg.position = new Vector3(0.15, -0.4, 0);
+    rightLeg.position = new Vector3(0.15, -0.45, 0);
     rightLeg.parent = playerGroup;
 
-    // Apply materials
-    const bodyMaterial = new StandardMaterial("playerBodyMat", this.scene);
-    bodyMaterial.diffuseColor = new Color3(0.2, 0.4, 0.8); // Blue shirt
+    // Apply modern materials with better colors
+    const bodyMaterial = new StandardMaterial("modernBodyMat", this.scene);
+    bodyMaterial.diffuseColor = new Color3(0.15, 0.45, 0.85); // Modern blue
+    bodyMaterial.specularColor = new Color3(0.1, 0.1, 0.1); // Subtle shine
     body.material = bodyMaterial;
     leftArm.material = bodyMaterial;
     rightArm.material = bodyMaterial;
 
-    const skinMaterial = new StandardMaterial("playerSkinMat", this.scene);
-    skinMaterial.diffuseColor = new Color3(0.9, 0.7, 0.6); // Skin tone
-    head.material = skinMaterial;
+    const headMaterial = new StandardMaterial("modernHeadMat", this.scene);
+    headMaterial.diffuseColor = new Color3(0.95, 0.8, 0.7); // Natural skin tone
+    headMaterial.specularColor = new Color3(0.1, 0.1, 0.1);
+    head.material = headMaterial;
 
-    const eyeMaterial = new StandardMaterial("playerEyeMat", this.scene);
-    eyeMaterial.diffuseColor = new Color3(0.1, 0.1, 0.1); // Dark eyes
-    leftEye.material = eyeMaterial;
-    rightEye.material = eyeMaterial;
+    const eyeMaterial = new StandardMaterial("modernEyeMat", this.scene);
+    eyeMaterial.diffuseColor = new Color3(0.1, 0.1, 0.1); // Dark stripe
+    eyeMaterial.emissiveColor = new Color3(0.05, 0.05, 0.05); // Slight glow
+    eyeStripe.material = eyeMaterial;
 
-    const noseMaterial = new StandardMaterial("playerNoseMat", this.scene);
-    noseMaterial.diffuseColor = new Color3(0.8, 0.6, 0.5); // Slightly darker skin
-    nose.material = noseMaterial;
+    const legMaterial = new StandardMaterial("modernLegMat", this.scene);
+    legMaterial.diffuseColor = new Color3(0.25, 0.25, 0.3); // Dark pants
+    legMaterial.specularColor = new Color3(0.1, 0.1, 0.1);
+    leftLeg.material = legMaterial;
+    rightLeg.material = legMaterial;
 
-    const pantsMaterial = new StandardMaterial("playerPantsMat", this.scene);
-    pantsMaterial.diffuseColor = new Color3(0.3, 0.3, 0.3); // Dark pants
-    leftLeg.material = pantsMaterial;
-    rightLeg.material = pantsMaterial;
+    // Add a subtle height adjustment so the player appears to stand on the ground
+    playerGroup.position.y = 0.1;
 
     return playerGroup;
+  }
+
+  // Future method for loading external assets (for later enhancement)
+  async loadExternalPlayerAsset(assetPath: string): Promise<AbstractMesh> {
+    try {
+      const result = await SceneLoader.ImportMeshAsync(
+        "", // Import all meshes
+        assetPath,
+        "",
+        this.scene
+      );
+
+      if (result.meshes.length === 0) {
+        throw new Error("No meshes found in the asset file");
+      }
+
+      // Get the root mesh or create a parent if multiple meshes
+      let playerMesh: AbstractMesh;
+      if (result.meshes.length === 1) {
+        playerMesh = result.meshes[0];
+      } else {
+        playerMesh = new Mesh("playerGroup", this.scene);
+        result.meshes.forEach(mesh => {
+          if (mesh.name !== "__root__") {
+            mesh.parent = playerMesh;
+          }
+        });
+      }
+
+      // Scale and position appropriately
+      playerMesh.scaling = new Vector3(0.8, 0.8, 0.8);
+      playerMesh.position.y = 0;
+
+      return playerMesh;
+    } catch (error) {
+      console.warn("Failed to load external player asset:", error);
+      console.log("Using default player model");
+      return this.createRealisticPlayer();
+    }
   }
 }
