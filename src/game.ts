@@ -13,6 +13,7 @@ import {
   Observer
 } from '@babylonjs/core';
 import { GridMaterial } from '@babylonjs/materials';
+import { Player, PlayerFactory } from './Player';
 
 // Types
 interface Position {
@@ -20,13 +21,15 @@ interface Position {
   y: number;
 }
 
-interface Player {
-  x: number;
-  y: number;
-  keys: number;
-  mesh: Mesh;
-  moving: boolean;
-}
+// Define key colors
+const KEY_COLORS = [
+  { name: 'gold', emissive: new Color3(1.0, 0.84, 0.0), diffuse: new Color3(0.8, 0.7, 0.2) },
+  { name: 'silver', emissive: new Color3(0.9, 0.9, 1.0), diffuse: new Color3(0.6, 0.6, 0.7) },
+  { name: 'copper', emissive: new Color3(1.0, 0.5, 0.2), diffuse: new Color3(0.7, 0.4, 0.2) },
+  { name: 'emerald', emissive: new Color3(0.2, 1.0, 0.4), diffuse: new Color3(0.1, 0.6, 0.2) },
+  { name: 'ruby', emissive: new Color3(1.0, 0.2, 0.3), diffuse: new Color3(0.7, 0.1, 0.2) },
+  { name: 'sapphire', emissive: new Color3(0.2, 0.4, 1.0), diffuse: new Color3(0.1, 0.2, 0.7) }
+];
 
 class GridPuzzle3D {
   private readonly MAP = [
@@ -67,6 +70,7 @@ class GridPuzzle3D {
   private readonly W: number;
   private readonly H: number;
   private player!: Player;
+  private playerFactory!: PlayerFactory;
   private spawnCell!: Position;
   private exitCell!: Position;
   
@@ -75,6 +79,7 @@ class GridPuzzle3D {
   private doors = new Map<string, AbstractMesh>();
   private boxes = new Map<string, AbstractMesh>();
   private keys = new Map<string, AbstractMesh>();
+  private keyColors = new Map<string, string>(); // Track key colors by position
   private lava = new Map<string, AbstractMesh>();
   
   // UI elements
@@ -135,6 +140,9 @@ class GridPuzzle3D {
 
     const light = new HemisphericLight("h", new Vector3(0, 1, 0), this.scene);
     light.intensity = 0.85;
+    
+    // Initialize PlayerFactory after scene is created
+    this.playerFactory = new PlayerFactory(this.scene);
   }
 
   private initMaterials(): void {
@@ -288,6 +296,13 @@ class GridPuzzle3D {
   private createRealisticKey(i: number, j: number): Mesh {
     const keyGroup = new Mesh(`keyGroup_${i}_${j}`, this.scene);
     
+    // Choose a random color for this key
+    const colorIndex = Math.floor(Math.random() * KEY_COLORS.length);
+    const keyColor = KEY_COLORS[colorIndex];
+    
+    // Store the key color for this position
+    this.keyColors.set(this.keyOf(i, j), keyColor.name);
+    
     // Key head (circular part)
     const keyHead = MeshBuilder.CreateTorus(
       `keyHead_${i}_${j}`,
@@ -323,10 +338,10 @@ class GridPuzzle3D {
     tooth2.position = new Vector3(0.04, -this.TILE * 0.2, 0);
     tooth2.parent = keyGroup;
 
-    // Apply golden material
+    // Apply the chosen color material
     const keyMaterial = new StandardMaterial(`keyMat_${i}_${j}`, this.scene);
-    keyMaterial.emissiveColor = new Color3(1.0, 0.84, 0.0); // Bright gold
-    keyMaterial.diffuseColor = new Color3(0.8, 0.7, 0.2); // Darker gold base
+    keyMaterial.emissiveColor = keyColor.emissive;
+    keyMaterial.diffuseColor = keyColor.diffuse;
     
     keyHead.material = keyMaterial;
     keyShaft.material = keyMaterial;
@@ -521,127 +536,18 @@ class GridPuzzle3D {
 
   private initPlayer(): void {
     // Create a more realistic player character with directional features
-    const playerMesh = this.createRealisticPlayer();
+    const playerMesh = this.playerFactory.createRealisticPlayer();
     
     this.player = {
       x: this.spawnCell.x,
       y: this.spawnCell.y,
       keys: 0,
+      keysByColor: new Map<string, number>(),
       mesh: playerMesh,
       moving: false
     };
 
     this.placePlayer(this.player.x, this.player.y);
-  }
-
-  private createRealisticPlayer(): Mesh {
-    // Create a compound player mesh with body parts
-    const playerGroup = new Mesh("playerGroup", this.scene);
-    
-    // Body (main torso)
-    const body = MeshBuilder.CreateBox(
-      "playerBody",
-      { width: 0.6, height: 1.2, depth: 0.4 },
-      this.scene
-    );
-    body.position.y = 0.6; // Center the body
-    body.parent = playerGroup;
-    
-    // Head
-    const head = MeshBuilder.CreateSphere(
-      "playerHead",
-      { diameter: 0.4 },
-      this.scene
-    );
-    head.position.y = 1.4; // On top of body
-    head.parent = playerGroup;
-    
-    // Eyes (to show direction)
-    const leftEye = MeshBuilder.CreateSphere(
-      "leftEye",
-      { diameter: 0.08 },
-      this.scene
-    );
-    leftEye.position = new Vector3(-0.1, 1.45, 0.15);
-    leftEye.parent = playerGroup;
-    
-    const rightEye = MeshBuilder.CreateSphere(
-      "rightEye",
-      { diameter: 0.08 },
-      this.scene
-    );
-    rightEye.position = new Vector3(0.1, 1.45, 0.15);
-    rightEye.parent = playerGroup;
-    
-    // Nose (pointing forward to show direction)
-    const nose = MeshBuilder.CreateBox(
-      "nose",
-      { width: 0.06, height: 0.06, depth: 0.12 },
-      this.scene
-    );
-    nose.position = new Vector3(0, 1.4, 0.2);
-    nose.parent = playerGroup;
-    
-    // Arms
-    const leftArm = MeshBuilder.CreateBox(
-      "leftArm",
-      { width: 0.2, height: 0.8, depth: 0.2 },
-      this.scene
-    );
-    leftArm.position = new Vector3(-0.5, 0.8, 0);
-    leftArm.parent = playerGroup;
-    
-    const rightArm = MeshBuilder.CreateBox(
-      "rightArm",
-      { width: 0.2, height: 0.8, depth: 0.2 },
-      this.scene
-    );
-    rightArm.position = new Vector3(0.5, 0.8, 0);
-    rightArm.parent = playerGroup;
-    
-    // Legs
-    const leftLeg = MeshBuilder.CreateBox(
-      "leftLeg",
-      { width: 0.25, height: 0.8, depth: 0.25 },
-      this.scene
-    );
-    leftLeg.position = new Vector3(-0.15, -0.4, 0);
-    leftLeg.parent = playerGroup;
-    
-    const rightLeg = MeshBuilder.CreateBox(
-      "rightLeg",
-      { width: 0.25, height: 0.8, depth: 0.25 },
-      this.scene
-    );
-    rightLeg.position = new Vector3(0.15, -0.4, 0);
-    rightLeg.parent = playerGroup;
-
-    // Apply materials
-    const bodyMaterial = new StandardMaterial("playerBodyMat", this.scene);
-    bodyMaterial.diffuseColor = new Color3(0.2, 0.4, 0.8); // Blue shirt
-    body.material = bodyMaterial;
-    leftArm.material = bodyMaterial;
-    rightArm.material = bodyMaterial;
-
-    const skinMaterial = new StandardMaterial("playerSkinMat", this.scene);
-    skinMaterial.diffuseColor = new Color3(0.9, 0.7, 0.6); // Skin tone
-    head.material = skinMaterial;
-
-    const eyeMaterial = new StandardMaterial("playerEyeMat", this.scene);
-    eyeMaterial.diffuseColor = new Color3(0.1, 0.1, 0.1); // Dark eyes
-    leftEye.material = eyeMaterial;
-    rightEye.material = eyeMaterial;
-
-    const noseMaterial = new StandardMaterial("playerNoseMat", this.scene);
-    noseMaterial.diffuseColor = new Color3(0.8, 0.6, 0.5); // Slightly darker skin
-    nose.material = noseMaterial;
-
-    const pantsMaterial = new StandardMaterial("playerPantsMat", this.scene);
-    pantsMaterial.diffuseColor = new Color3(0.3, 0.3, 0.3); // Dark pants
-    leftLeg.material = pantsMaterial;
-    rightLeg.material = pantsMaterial;
-
-    return playerGroup;
   }
 
   private initCamera(): void {
@@ -742,17 +648,20 @@ class GridPuzzle3D {
       }
 
       // Remove lava if box is pushed into it
+      const box = this.boxes.get(targetKey)!;
       if (this.lava.has(boxTargetKey)) {
         this.lava.get(boxTargetKey)!.dispose();
         this.lava.delete(boxTargetKey);
+        this.boxes.delete(targetKey);
+        this.blocked.delete(targetKey);
+        box.dispose();
+      } else {
+        this.boxes.delete(targetKey);
+        this.blocked.delete(targetKey);
+        this.boxes.set(boxTargetKey, box);
+        this.blocked.add(boxTargetKey);
       }
 
-      // Move box
-      const box = this.boxes.get(targetKey)!;
-      this.boxes.delete(targetKey);
-      this.blocked.delete(targetKey);
-      this.boxes.set(boxTargetKey, box);
-      this.blocked.add(boxTargetKey);
 
       this.tweenPosition(
         box,
@@ -791,8 +700,17 @@ class GridPuzzle3D {
 
     // Key pickup
     if (this.keys.has(playerKey)) {
+      // Get the key color before disposing
+      const keyColor = this.keyColors.get(playerKey);
+      if (keyColor) {
+        // Update color-specific count
+        const currentCount = this.player.keysByColor.get(keyColor) || 0;
+        this.player.keysByColor.set(keyColor, currentCount + 1);
+      }
+      
       this.keys.get(playerKey)!.dispose();
       this.keys.delete(playerKey);
+      this.keyColors.delete(playerKey);
       this.player.keys++;
       this.updateHUD();
     }
@@ -822,7 +740,7 @@ class GridPuzzle3D {
 
     // Recreate player mesh if disposed
     if (this.player.mesh.isDisposed()) {
-      const playerMesh = this.createRealisticPlayer();
+      const playerMesh = this.playerFactory.createRealisticPlayer();
       this.player.mesh = playerMesh;
       this.camera.setMeshTarget(playerMesh); // Update camera target
     }
@@ -905,7 +823,46 @@ class GridPuzzle3D {
   }
 
   private updateHUD(): void {
-    this.hudElement.textContent = `Keys: ${this.player.keys}`;
+    const keysContainer = document.getElementById("keys-container");
+    if (!keysContainer) return;
+    
+    // Clear existing keys
+    keysContainer.innerHTML = "";
+    
+    // If no keys, show empty state
+    if (this.player.keys === 0) {
+      keysContainer.innerHTML = '<div style="color: #666; font-style: italic; font-size: 12px;">No keys collected</div>';
+      return;
+    }
+    
+    // Create visual elements for each key color
+    for (const [colorName, count] of this.player.keysByColor.entries()) {
+      if (count > 0) {
+        const keyColor = KEY_COLORS.find(c => c.name === colorName);
+        if (keyColor) {
+          const keyItem = document.createElement("div");
+          keyItem.className = "key-item";
+          keyItem.style.borderColor = `rgb(${Math.floor(keyColor.emissive.r * 255)}, ${Math.floor(keyColor.emissive.g * 255)}, ${Math.floor(keyColor.emissive.b * 255)})`;
+          
+          const colorDot = document.createElement("div");
+          colorDot.className = "key-color";
+          colorDot.style.backgroundColor = `rgb(${Math.floor(keyColor.emissive.r * 255)}, ${Math.floor(keyColor.emissive.g * 255)}, ${Math.floor(keyColor.emissive.b * 255)})`;
+          colorDot.style.color = `rgb(${Math.floor(keyColor.emissive.r * 255)}, ${Math.floor(keyColor.emissive.g * 255)}, ${Math.floor(keyColor.emissive.b * 255)})`;
+          
+          keyItem.appendChild(colorDot);
+          
+          // Only show count if there are multiple keys of the same color
+          if (count > 1) {
+            const countSpan = document.createElement("span");
+            countSpan.className = "key-count";
+            countSpan.textContent = count.toString();
+            keyItem.appendChild(countSpan);
+          }
+          
+          keysContainer.appendChild(keyItem);
+        }
+      }
+    }
   }
 
   private showBanner(message: string): void {
