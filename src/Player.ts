@@ -17,6 +17,7 @@ export interface Player {
     keysByColor: Map<string, number>; // Track keys by color
     mesh: AbstractMesh;
     moving: boolean;
+    rotation: number; // Player's facing direction in radians
     animationGroups?: AnimationGroup[]; // Store animations if available
 }
 
@@ -158,17 +159,12 @@ export class PlayerFactory {
             }
 
             // Get the root mesh or create a parent if multiple meshes
-            let playerMesh: AbstractMesh;
-            if (result.meshes.length === 1) {
-                playerMesh = result.meshes[0];
-            } else {
-                playerMesh = new Mesh("playerGroup", this.scene);
-                result.meshes.forEach((mesh: AbstractMesh) => {
-                    if (mesh.name !== "__root__") {
-                        mesh.parent = playerMesh;
-                    }
-                });
-            }
+            let playerMesh = new Mesh("playerGroup", this.scene);
+            result.meshes.forEach((mesh: AbstractMesh) => {
+                if (mesh.name !== "__root__") {
+                    mesh.parent = playerMesh;
+                }
+            });
 
             // Apply appropriate scaling based on file format and content
             if (assetPath.includes(".fbx")) {
@@ -187,7 +183,7 @@ export class PlayerFactory {
 
             // Ensure the model faces forward (adjust rotation if needed)
             playerMesh.rotation.x = -Math.PI/2;
-            playerMesh.rotation.z = Math.PI/2;
+            playerMesh.rotation.z = Math.PI;
             playerMesh.position.z = 100;
 
             return playerMesh;

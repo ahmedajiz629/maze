@@ -5,7 +5,7 @@ import {
   Color4,
   Color3,
   HemisphericLight,
-  ArcFollowCamera,
+  ArcRotateCamera,
   MeshBuilder,
   Mesh,
   StandardMaterial,
@@ -64,7 +64,7 @@ class GridPuzzle3D {
   private engine!: Engine;
   private scene!: Scene;
   private canvas: HTMLCanvasElement;
-  private camera!: ArcFollowCamera;
+  private camera!: ArcRotateCamera;
   
   // Game state
   private readonly W: number;
@@ -139,7 +139,8 @@ class GridPuzzle3D {
       keys: 0,
       keysByColor: new Map<string, number>(),
       mesh: tempMesh,
-      moving: false
+      moving: false,
+      rotation: 0 // Start facing right (0 radians)
     };
 
     this.placePlayer(this.player.x, this.player.y);
@@ -159,7 +160,7 @@ class GridPuzzle3D {
       this.placePlayer(this.player.x, this.player.y);
       
       // Update camera target
-      this.camera.setMeshTarget(realPlayerMesh);
+      this.camera.setTarget(realPlayerMesh.position);
       
       this.showBanner("Player loaded! Use arrow keys or WASD to move.");
     } catch (error) {
@@ -593,24 +594,46 @@ class GridPuzzle3D {
       keys: 0,
       keysByColor: new Map<string, number>(),
       mesh: playerMesh,
-      moving: false
+      moving: false,
+      rotation: 0 // Start facing right (0 radians)
     };
 
     this.placePlayer(this.player.x, this.player.y);
   }
 
   private initCamera(): void {
-    this.camera = new ArcFollowCamera(
+    // Create ArcRotateCamera for better mouse control
+    this.camera = new ArcRotateCamera(
       "cam",
-      0.2 - Math.PI / 2,
-      .7,
-      20,
-      this.player.mesh,
+      -Math.PI / 2, // Alpha (horizontal rotation)
+      Math.PI / 3,  // Beta (vertical rotation)
+      15,           // Radius (distance from target)
+      Vector3.Zero(), // Initial target
       this.scene
     );
+    
+    // Enable mouse controls for camera rotation
     this.camera.attachControl(this.canvas, true);
-    // Note: wheelPrecision might not be available in all versions
-    (this.camera as any).wheelPrecision = 40;
+    
+    // Configure mouse rotation sensitivity (lower = more sensitive)
+    this.camera.angularSensibilityX = 1000; // Horizontal rotation sensitivity
+    this.camera.angularSensibilityY = 1000; // Vertical rotation sensitivity
+    
+    // Configure wheel zoom sensitivity
+    this.camera.wheelPrecision = 20;
+    
+    // Set rotation limits to prevent camera from going too high or low
+    this.camera.lowerBetaLimit = 0.1; // Minimum vertical angle (prevent going below ground)
+    this.camera.upperBetaLimit = Math.PI / 2.2; // Maximum vertical angle (prevent going too high)
+    
+    // Set distance limits
+    this.camera.lowerRadiusLimit = 5;  // Minimum zoom distance
+    this.camera.upperRadiusLimit = 30; // Maximum zoom distance
+    
+    // Set the target to follow the player
+    if (this.player && this.player.mesh) {
+      this.camera.setTarget(this.player.mesh.position);
+    }
   }
 
   private initInput(): void {
@@ -634,7 +657,6 @@ class GridPuzzle3D {
     if (this.player.moving) return;
 
     const key = e.key.toLowerCase();
-    let dx = 0, dy = 0;
 
     if (this.player.mesh.isDisposed() || key === "r") {
       this.resetGame().catch(error => {
@@ -647,25 +669,44 @@ class GridPuzzle3D {
     switch (key) {
       case "arrowleft":
       case "q":
-        dx = -1;
+        // Rotate left
+        this.rotatePlayer(Math.PI / 2);
         break;
       case "arrowright":
       case "d":
-        dx = 1;
+        // Rotate right
+        this.rotatePlayer(-Math.PI / 2);
         break;
       case "arrowup":
       case "z":
-        dy = 1;
+        // Move forward in the direction the player is facing
+        this.movePlayerForward();
         break;
-      case "arrowdown":
-      case "s":
-        dy = -1;
-        break;
+      // Remove down/backward movement
       default:
         return;
     }
+  }
 
-    this.attemptMove(dx, dy);
+  private rotatePlayer(deltaRotation: number): void {
+    this.player.rotation += deltaRotation;
+    // Normalize rotation to 0-2π range
+    this.player.rotation = ((this.player.rotation % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
+    
+    // Apply rotation to the mesh
+    this.player.mesh.rotation.y = -this.player.rotation;
+  }
+
+  private movePlayerForward(): void {
+    // Calculate the direction vector based on player rotation
+    const dx = Math.cos(this.player.rotation);
+    const dy = Math.sin(this.player.rotation);
+    
+    // Round to get grid-aligned movement
+    const gridDx = Math.round(dx);
+    const gridDy = Math.round(dy);
+    
+    this.attemptMove(gridDx, gridDy);
   }
 
   private attemptMove(dx: number, dy: number): void {
@@ -732,19 +773,59 @@ class GridPuzzle3D {
   private movePlayer(nx: number, ny: number): void {
     this.player.moving = true;
 
-    this.tweenPosition(
-      this.player.mesh,
-      this.cellToWorld(nx, ny, this.TILE * 0.5),
+    // Store initial positions for camera following
+    const initialCameraPosition = this.camera.position.clone();
+    const initialCameraTarget = this.camera.getTarget();
+    const initialPlayerPosition = this.player.mesh.position.clone();
+    const targetPlayerPosition = this.cellToWorld(nx, ny, this.TILE * 0.5);
+    const movementDelta = targetPlayerPosition.subtract(initialPlayerPosition);
+
+    this.tweenPlayerAndCamera(
+      targetPlayerPosition,
       this.MOVE_MS,
+      initialCameraPosition,
+      initialCameraTarget,
+      movementDelta,
       () => {
         this.player.x = nx;
         this.player.y = ny;
         this.player.moving = false;
-        // ArcFollowCamera automatically follows the target mesh, no need to set target
-
         this.handlePlayerLanded();
       }
     );
+  }
+
+  private tweenPlayerAndCamera(
+    targetPos: Vector3,
+    durationMs: number,
+    initialCameraPosition: Vector3,
+    initialCameraTarget: Vector3,
+    movementDelta: Vector3,
+    onComplete?: () => void
+  ): void {
+    const startPos = this.player.mesh.position.clone();
+    const startTime = performance.now();
+
+    const observer = this.scene.onBeforeRenderObservable.add(() => {
+      const elapsed = performance.now() - startTime;
+      const progress = Math.min(elapsed / durationMs, 1);
+      
+      // Smooth easing
+      const easedProgress = 0.5 - 0.5 * Math.cos(Math.PI * progress);
+      
+      // Update player position
+      this.player.mesh.position = Vector3.Lerp(startPos, targetPos, easedProgress);
+      
+      // Update camera position and target to follow
+      const cameraOffset = movementDelta.scale(easedProgress);
+      this.camera.position = initialCameraPosition.add(cameraOffset);
+      this.camera.setTarget(initialCameraTarget.add(cameraOffset));
+
+      if (progress >= 1) {
+        this.scene.onBeforeRenderObservable.remove(observer);
+        if (onComplete) onComplete();
+      }
+    });
   }
 
   private handlePlayerLanded(): void {
@@ -794,7 +875,7 @@ class GridPuzzle3D {
     if (this.player.mesh.isDisposed()) {
       const playerMesh = await this.playerFactory.createRealisticPlayer();
       this.player.mesh = playerMesh;
-      this.camera.setMeshTarget(playerMesh); // Update camera target
+      this.camera.setTarget(playerMesh.position); // Update camera target
     }
 
     this.placePlayer(this.player.x, this.player.y);
@@ -803,9 +884,26 @@ class GridPuzzle3D {
   }
 
   private placePlayer(x: number, y: number): void {
-    this.player.mesh.position = this.cellToWorld(x, y, this.TILE * 0.5);
-    // For ArcFollowCamera, we don't need to manually set target as it follows the mesh
-    // The camera automatically follows the target mesh passed in constructor
+    // Get the old player position before moving
+    const oldPosition = this.player.mesh.position.clone();
+    
+    // Move the player to new position
+    const newPosition = this.cellToWorld(x, y, this.TILE * 0.5);
+    this.player.mesh.position = newPosition;
+    
+    // Calculate the movement delta
+    const deltaPosition = newPosition.subtract(oldPosition);
+    
+    // Translate the camera by the same amount to follow the player
+    if (this.camera) {
+      // Get current camera target and position
+      const currentTarget = this.camera.getTarget();
+      const currentPosition = this.camera.position.clone();
+      
+      // Move both target and camera position by the same delta
+      this.camera.setTarget(currentTarget.add(deltaPosition));
+      this.camera.position = currentPosition.add(deltaPosition);
+    }
   }
 
   private tweenPosition(
