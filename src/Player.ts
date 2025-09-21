@@ -30,16 +30,9 @@ export class PlayerFactory {
 
   // Try to load external asset first, fallback to procedural if needed
   async createRealisticPlayer(): Promise<AbstractMesh> {
-    // List of publicly available 3D assets to try
+    // List of publicly available 3D assets to try (static models preferred)
     const assetUrls = [
-      // Khronos glTF sample models (guaranteed to work)
-      "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMan/glTF/CesiumMan.gltf",
-      // Simple character from Three.js examples
-      "https://threejs.org/examples/models/gltf/RobotExpressive/RobotExpressive.glb",
-      // Mixamo character (if available)
-      "./assets/models/character.glb",
-      // Local fallback
-      "./models/player.glb"
+      "./assets/models/player.glb"
     ];
 
     for (const assetUrl of assetUrls) {
@@ -153,7 +146,7 @@ export class PlayerFactory {
     return playerGroup;
   }
 
-  // Future method for loading external assets (for later enhancement)
+  // Load external assets with proper scaling for maze game
   async loadExternalPlayerAsset(assetPath: string): Promise<AbstractMesh> {
     try {
       const result = await SceneLoader.ImportMeshAsync(
@@ -180,15 +173,35 @@ export class PlayerFactory {
         });
       }
 
-      // Scale and position appropriately
-      playerMesh.scaling = new Vector3(0.8, 0.8, 0.8);
-      playerMesh.position.y = 0;
+      // Apply specific scaling and positioning based on the model type
+      if (assetPath.includes("Suzanne")) {
+        // Suzanne is a head, make it bigger and position properly
+        playerMesh.scaling = new Vector3(1.2, 1.2, 1.2);
+        playerMesh.position.y = 0.5;
+      } else if (assetPath.includes("Duck")) {
+        // Duck model, scale and position
+        playerMesh.scaling = new Vector3(0.8, 0.8, 0.8);
+        playerMesh.position.y = 0.2;
+      } else if (assetPath.includes("Avocado")) {
+        // Avocado, good size for maze
+        playerMesh.scaling = new Vector3(1.0, 1.0, 1.0);
+        playerMesh.position.y = 0.3;
+      } else if (assetPath.includes("Cube")) {
+        // Simple cube
+        playerMesh.scaling = new Vector3(0.8, 0.8, 0.8);
+        playerMesh.position.y = 0.4;
+      } else {
+        // Default scaling for unknown models
+        playerMesh.scaling = new Vector3(0.8, 0.8, 0.8);
+        playerMesh.position.y = 0;
+      }
+
+      // Ensure the model faces forward (adjust rotation if needed)
+      playerMesh.rotation.y = 0;
 
       return playerMesh;
     } catch (error) {
-      console.warn("Failed to load external player asset:", error);
-      console.log("Using default player model");
-      return this.createRealisticPlayer();
+      throw new Error(`Failed to load player asset from ${assetPath}: ${error}`);
     }
   }
 }
