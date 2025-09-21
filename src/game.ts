@@ -33,8 +33,8 @@ const KEY_COLORS = [
 
 class GridPuzzle3D {
   private readonly MAP = [
-    "####################",
-    "#S....#...........E#",
+    "...#################",
+    ".S....#...........E#",
     "#~##.#.#####.#######",
     "#~...#.....#.......#",
     "###.###.#.#.###.#..#",
@@ -118,20 +118,58 @@ class GridPuzzle3D {
     this.initMaterials();
     this.initGeometry();
     this.initMap();
-    // Player, camera, and input initialization are now async
-    this.initializeAsync();
+    
+    // Create a temporary invisible player for camera setup
+    this.initTemporaryPlayer();
+    this.initCamera();
+    this.initInput();
+    
+    // Replace with real player asynchronously
+    this.loadRealPlayer().then(()=>this.start());
   }
 
-  private async initializeAsync(): Promise<void> {
+  private initTemporaryPlayer(): void {
+    // Create a simple invisible placeholder for camera setup
+    const tempMesh = MeshBuilder.CreateBox("tempPlayer", { size: 1 }, this.scene);
+    tempMesh.visibility = 0; // Make it invisible
+    
+    this.player = {
+      x: this.spawnCell.x,
+      y: this.spawnCell.y,
+      keys: 0,
+      keysByColor: new Map<string, number>(),
+      mesh: tempMesh,
+      moving: false
+    };
+
+    this.placePlayer(this.player.x, this.player.y);
+  }
+
+  private async loadRealPlayer(): Promise<void> {
     try {
-      await this.initPlayer();
-      this.initCamera();
-      this.initInput();
-      this.start();
+      // Load the real player
+      const realPlayerMesh = await this.playerFactory.createRealisticPlayer();
+      
+      // Replace the temporary player
+      if (this.player.mesh) {
+        this.player.mesh.dispose();
+      }
+      
+      this.player.mesh = realPlayerMesh;
+      this.placePlayer(this.player.x, this.player.y);
+      
+      // Update camera target
+      this.camera.setMeshTarget(realPlayerMesh);
+      
       this.showBanner("Player loaded! Use arrow keys or WASD to move.");
     } catch (error) {
-      console.error("Failed to initialize player:", error);
-      this.showBanner("Player loading failed, using fallback.");
+      console.error("Failed to load real player:", error);
+      // Keep the temporary player but make it visible as fallback
+      this.player.mesh.visibility = 1;
+      const fallbackMaterial = new StandardMaterial("fallbackMat", this.scene);
+      fallbackMaterial.diffuseColor = new Color3(0.5, 0.5, 1);
+      this.player.mesh.material = fallbackMaterial;
+      this.showBanner("Using fallback player. Use arrow keys or WASD to move.");
     }
   }
 
@@ -564,9 +602,9 @@ class GridPuzzle3D {
   private initCamera(): void {
     this.camera = new ArcFollowCamera(
       "cam",
-      -Math.PI / 2,
-      1.05,
-      26,
+      0.2 - Math.PI / 2,
+      .7,
+      20,
       this.player.mesh,
       this.scene
     );
@@ -794,7 +832,7 @@ class GridPuzzle3D {
         const moveDirection = targetPos.subtract(startPos);
         if (moveDirection.length() > 0.001) {
           const targetRotationY = Math.atan2(moveDirection.x, moveDirection.z);
-          mesh.rotation.y = targetRotationY;
+          mesh.rotation.z = targetRotationY + Math.PI / 2; // Adjust for model orientation
         }
         
         // Add walking bob animation
@@ -804,9 +842,9 @@ class GridPuzzle3D {
         // Add slight walking sway
         if (this.player.moving) {
           const sway = 0.02 * Math.sin(8 * Math.PI * easedProgress);
-          mesh.rotation.z = sway;
+          mesh.rotation.x = sway - Math.PI / 2;
         } else {
-          mesh.rotation.z = 0;
+          mesh.rotation.x = -Math.PI / 2;
         }
       }
       
