@@ -13,7 +13,9 @@ import {
   Observer,
   SceneLoader,
   ImportMeshAsync,
-  Texture
+  Texture,
+  DynamicTexture,
+  VideoTexture
 } from '@babylonjs/core';
 import '@babylonjs/loaders'; // This adds the loaders to the scene
 import { GridMaterial } from '@babylonjs/materials';
@@ -221,7 +223,8 @@ class GridPuzzle3D {
     this.matFloor.diffuseTexture = grassTexture;
 
     this.matWall = new StandardMaterial("wall", this.scene);
-    this.matWall.diffuseColor = new Color3(0.32, 0.34, 0.4);
+    const wallTexture = new Texture("assets/models/wall.png", this.scene);
+    this.matWall.diffuseTexture = wallTexture;
 
     this.matBox = new StandardMaterial("box", this.scene);
     this.matBox.diffuseColor = new Color3(0.63, 0.47, 0.35);
@@ -469,83 +472,108 @@ class GridPuzzle3D {
   }
 
   private createRealisticLava(i: number, j: number): Mesh {
-    const lavaGroup = new Mesh(`lavaGroup_${i}_${j}`, this.scene);
-
-    // Main lava pool (slightly depressed)
-    const lavaPool = MeshBuilder.CreateBox(
-      `lavaPool_${i}_${j}`,
-      { width: this.TILE * 0.95, depth: this.TILE * 0.95, height: 0.15 },
+    // Create a simple plane for the lava
+    const lavaPlane = MeshBuilder.CreatePlane(
+      `lava_${i}_${j}`,
+      { width: this.TILE * 0.95, height: this.TILE * 0.95 },
       this.scene
     );
-    lavaPool.position.y = -0.05;
-    lavaPool.parent = lavaGroup;
+    
+    // Rotate to lie flat on the ground
+    lavaPlane.rotation.x = Math.PI / 2;
+    lavaPlane.position.y = 0.01; // Slightly above ground to avoid z-fighting
 
-    // Create multiple bubbling spheres for realistic effect
-    const bubbleCount = 5;
-    const bubbles: Mesh[] = [];
+    // Create material with animated GIF texture
+    const lavaMaterial = new StandardMaterial(`lavaMat_${i}_${j}`, this.scene);
+    const lavaTexture = new Texture("assets/models/lava.gif", this.scene);
+    
+    lavaMaterial.diffuseTexture = lavaTexture;
+    lavaMaterial.emissiveTexture = lavaTexture; // Make it glow
+    lavaMaterial.emissiveColor = new Color3(0.3, 0.1, 0.05); // Subtle glow tint
+    
+    lavaPlane.material = lavaMaterial;
 
-    for (let b = 0; b < bubbleCount; b++) {
-      const bubble = MeshBuilder.CreateSphere(
-        `lavaBubble_${i}_${j}_${b}`,
-        { diameter: 0.1 + Math.random() * 0.2 },
-        this.scene
-      );
+    // Initialize GIF animation with material reference
+    this.initGifAnimation(lavaMaterial, "assets/models/lava.gif");
 
-      // Random position within the lava pool
-      bubble.position = new Vector3(
-        (Math.random() - 0.5) * this.TILE * 0.8,
-        Math.random() * 0.05,
-        (Math.random() - 0.5) * this.TILE * 0.8
-      );
-      bubble.parent = lavaGroup;
-      bubbles.push(bubble);
+    return lavaPlane;
+  }
+
+  private async initGifAnimation(material: StandardMaterial, gifUrl: string): Promise<void> {
+    try {
+      // Check if ImageDecoder is supported
+      if (typeof (window as any).ImageDecoder === 'undefined') {
+        console.warn('ImageDecoder not supported, GIF will be static');
+        return;
+      }
+
+      const response = await fetch(gifUrl);
+      const imageDecoder = new (window as any).ImageDecoder({ data: response.body, type: 'image/gif' });
+      
+      await imageDecoder.tracks.ready;
+      await imageDecoder.completed;
+
+      console.log(imageDecoder, `GIF has ${imageDecoder.tracks[0].frameCount} frames`);
+
+      const maxFrame = imageDecoder.tracks[0].frameCount;
+      
+      if (maxFrame <= 1) {
+        console.log('GIF has only one frame, will be static');
+        return;
+      }
+
+      // Create a single dynamic texture that we'll reuse
+      const firstResult = await imageDecoder.decode({ frameIndex: 0 });
+      const canvas = document.createElement('canvas');
+      canvas.width = firstResult.image.displayWidth;
+      canvas.height = firstResult.image.displayHeight;
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        console.error('Could not get canvas context');
+        return;
+      }
+      
+      // Create the dynamic texture once
+      const dynamicTexture = new DynamicTexture(`lavaAnimated`, {width: canvas.width, height: canvas.height}, this.scene, false);
+      const dynamicCtx = dynamicTexture.getContext();
+      
+      // Set up the material with the dynamic texture
+      material.diffuseTexture = dynamicTexture;
+      material.emissiveTexture = dynamicTexture;
+      
+      let imageIndex = 0;
+      const render = async () => {
+        try {
+          const result = await imageDecoder.decode({ frameIndex: imageIndex });
+          
+          // Draw frame to our canvas
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(result.image, 0, 0);
+          
+          // Copy canvas to dynamic texture
+          dynamicCtx.clearRect(0, 0, canvas.width, canvas.height);
+          dynamicCtx.drawImage(canvas, 0, 0);
+          dynamicTexture.update();
+          
+          imageIndex++;
+          if (imageIndex >= maxFrame) {
+            imageIndex = 0;
+          }
+          
+          // Use the frame duration from the GIF, with a minimum of 100ms
+          const duration = Math.max(result.image.duration / 1000.0, 100);
+          setTimeout(render, duration / 5);
+        } catch (error) {
+          console.error('Error decoding GIF frame:', error);
+        }
+      };
+      
+      await render();
+      
+    } catch (error) {
+      console.error('Failed to initialize GIF animation:', error);
     }
-
-    // Enhanced lava material with animation
-    const lavaMaterial = new StandardMaterial(`lavaPoolMat_${i}_${j}`, this.scene);
-    lavaMaterial.diffuseColor = new Color3(0.9, 0.2, 0.1); // Bright red-orange
-    lavaMaterial.emissiveColor = new Color3(1.0, 0.4, 0.1); // Glowing effect
-    lavaMaterial.specularColor = new Color3(1.0, 0.6, 0.2); // Shiny surface
-
-    // Bubble material - more yellow-orange for heat
-    const bubbleMaterial = new StandardMaterial(`lavaBubbleMat_${i}_${j}`, this.scene);
-    bubbleMaterial.diffuseColor = new Color3(1.0, 0.5, 0.1); // Hot orange
-    bubbleMaterial.emissiveColor = new Color3(1.0, 0.6, 0.2); // Very glowing
-
-    lavaPool.material = lavaMaterial;
-    bubbles.forEach(bubble => bubble.material = bubbleMaterial);
-
-    // Add bubbling animation
-    this.scene.onBeforeRenderObservable.add(() => {
-      const time = performance.now() * 0.001;
-
-      // Animate bubbles - make them bob up and down at different rates
-      bubbles.forEach((bubble, index) => {
-        const speed = 1.5 + index * 0.3;
-        const amplitude = 0.03 + index * 0.01;
-        bubble.position.y = Math.abs(Math.sin(time * speed)) * amplitude;
-
-        // Slight horizontal movement for more realism
-        const originalX = (Math.random() - 0.5) * this.TILE * 0.8;
-        const originalZ = (Math.random() - 0.5) * this.TILE * 0.8;
-        bubble.position.x = originalX + Math.sin(time * speed * 0.5) * 0.02;
-        bubble.position.z = originalZ + Math.cos(time * speed * 0.7) * 0.02;
-
-        // Scale bubbles to simulate popping and reforming
-        const scale = 0.8 + 0.4 * Math.abs(Math.sin(time * speed * 1.5));
-        bubble.scaling = new Vector3(scale, scale, scale);
-      });
-
-      // Make the main pool glow pulse
-      const glowIntensity = 0.8 + 0.3 * Math.sin(time * 2);
-      lavaMaterial.emissiveColor = new Color3(
-        1.0 * glowIntensity,
-        0.4 * glowIntensity,
-        0.1 * glowIntensity
-      );
-    });
-
-    return lavaGroup;
   }
 
   private createExit(i: number, j: number, p: Vector3): void {
