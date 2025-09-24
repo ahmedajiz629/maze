@@ -15,7 +15,8 @@ import {
   ImportMeshAsync,
   Texture,
   DynamicTexture,
-  VideoTexture
+  VideoTexture,
+  PBRMaterial
 } from '@babylonjs/core';
 import '@babylonjs/loaders'; // This adds the loaders to the scene
 import { GridMaterial } from '@babylonjs/materials';
@@ -29,12 +30,12 @@ interface Position {
 
 // Define key colors
 const KEY_COLORS = [
-  { name: 'gold', emissive: new Color3(1.0, 0.84, 0.0), diffuse: new Color3(0.8, 0.7, 0.2) },
-  { name: 'silver', emissive: new Color3(0.9, 0.9, 1.0), diffuse: new Color3(0.6, 0.6, 0.7) },
-  { name: 'copper', emissive: new Color3(1.0, 0.5, 0.2), diffuse: new Color3(0.7, 0.4, 0.2) },
-  { name: 'emerald', emissive: new Color3(0.2, 1.0, 0.4), diffuse: new Color3(0.1, 0.6, 0.2) },
-  { name: 'ruby', emissive: new Color3(1.0, 0.2, 0.3), diffuse: new Color3(0.7, 0.1, 0.2) },
-  { name: 'sapphire', emissive: new Color3(0.2, 0.4, 1.0), diffuse: new Color3(0.1, 0.2, 0.7) }
+  { name: 'gold', emissive: new Color3(0.4, 0.34, 0.0), diffuse: new Color3(0.6, 0.5, 0.2) },
+  { name: 'silver', emissive: new Color3(0.3, 0.3, 0.35), diffuse: new Color3(0.5, 0.5, 0.55) },
+  { name: 'copper', emissive: new Color3(0.4, 0.2, 0.08), diffuse: new Color3(0.55, 0.3, 0.15) },
+  { name: 'emerald', emissive: new Color3(0.08, 0.4, 0.16), diffuse: new Color3(0.1, 0.45, 0.2) },
+  { name: 'ruby', emissive: new Color3(0.4, 0.08, 0.12), diffuse: new Color3(0.5, 0.1, 0.15) },
+  { name: 'sapphire', emissive: new Color3(0.08, 0.16, 0.4), diffuse: new Color3(0.1, 0.2, 0.5) }
 ];
 
 class GridPuzzle3D {
@@ -429,7 +430,7 @@ class GridPuzzle3D {
   private async createExternalKey(i: number, j: number): Promise<Mesh> {
     try {
       // Import the skeleton key GLB model
-      const result = await ImportMeshAsync("assets/models/stone.glb", this.scene);
+      const result = await ImportMeshAsync("assets/models/squid_key.glb", this.scene);
 
       if (!result.meshes || result.meshes.length === 0) {
         console.warn(`No meshes found in the path, falling back to procedural key`);
@@ -445,14 +446,67 @@ class GridPuzzle3D {
 
       // Store the key color for this position
       this.keyColors.set(this.keyOf(i, j), keyColor.name);
+      
 
-      // Parent all imported meshes to our key group and apply material
+      // Parent all imported meshes to our key group and apply color tint
+      console.log(result.meshes.slice(1).map(m => m.material));
       result.meshes.forEach((mesh: AbstractMesh, index: number) => {
         if (mesh.name !== "__root__") {
           mesh.parent = keyGroup;
-          mesh.scaling = new Vector3(0.01, 0.01, 0.01); // Scale down if needed
-          mesh.rotation.z = 0; // Rotate to stand upright
-          mesh.position.z += 10; // Center position
+          
+          // Preserve original material but apply color tint
+          if (mesh.material && mesh.material instanceof PBRMaterial) {
+            const originalMaterial = mesh.material as PBRMaterial;
+            
+            // Create a copy of the original material to avoid affecting other instances
+            const tintedMaterial = originalMaterial.clone(`tinted_${mesh.name}_${i}_${j}`);
+            
+            // Apply color tint to PBR material (use albedoColor instead of diffuseColor)
+            if (tintedMaterial.albedoColor) {
+              tintedMaterial.albedoColor = tintedMaterial.albedoColor.multiply(keyColor.diffuse);
+            } else {
+              tintedMaterial.albedoColor = keyColor.diffuse;
+            }
+            
+            // Add subtle emissive glow
+            if (tintedMaterial.emissiveColor) {
+              tintedMaterial.emissiveColor = tintedMaterial.emissiveColor.add(keyColor.emissive);
+            } else {
+              tintedMaterial.emissiveColor = keyColor.emissive;
+            }
+            
+            mesh.material = tintedMaterial;
+            console.log('PBR tinted')
+          } else if (mesh.material && mesh.material instanceof StandardMaterial) {
+            const originalMaterial = mesh.material as StandardMaterial;
+            
+            // Create a copy of the original material to avoid affecting other instances
+            const tintedMaterial = originalMaterial.clone(`tinted_${mesh.name}_${i}_${j}`);
+            
+            // Apply color tint by multiplying with the key color
+            if (tintedMaterial.diffuseColor) {
+              tintedMaterial.diffuseColor = tintedMaterial.diffuseColor.multiply(keyColor.diffuse);
+            } else {
+              tintedMaterial.diffuseColor = keyColor.diffuse;
+            }
+            
+            // Add subtle emissive glow
+            if (tintedMaterial.emissiveColor) {
+              tintedMaterial.emissiveColor = tintedMaterial.emissiveColor.add(keyColor.emissive);
+            } else {
+              tintedMaterial.emissiveColor = keyColor.emissive;
+            }
+            
+            mesh.material = tintedMaterial;
+            console.log('Standard tinted')
+          } else {
+            // If no material or unknown type, create a new PBR material
+            const newMaterial = new PBRMaterial(`keyMat_${mesh.name}_${i}_${j}`, this.scene);
+            newMaterial.emissiveColor = keyColor.emissive;
+            newMaterial.albedoColor = keyColor.diffuse;
+            mesh.material = newMaterial;
+            console.log('PBR replaced')
+          }
         }
       });
 
@@ -732,7 +786,6 @@ class GridPuzzle3D {
     this.scene.onBeforeRenderObservable.add(() => {
       const t = performance.now() * 0.001;
       for (const keyGroup of this.keys.values()) {
-        continue;
         // Rotate the entire key group (works for both external models and procedural keys)
         keyGroup.rotation.y = t * 2;
 
