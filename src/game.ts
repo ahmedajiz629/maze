@@ -12,7 +12,8 @@ import {
   AbstractMesh,
   Observer,
   SceneLoader,
-  ImportMeshAsync
+  ImportMeshAsync,
+  Texture
 } from '@babylonjs/core';
 import '@babylonjs/loaders'; // This adds the loaders to the scene
 import { GridMaterial } from '@babylonjs/materials';
@@ -90,7 +91,7 @@ class GridPuzzle3D {
   private bannerElement: HTMLElement;
 
   // Materials
-  private matFloor!: GridMaterial;
+  private matFloor!: StandardMaterial;
   private matWall!: StandardMaterial;
   private matBox!: StandardMaterial;
   private matDoor!: StandardMaterial;
@@ -137,6 +138,7 @@ class GridPuzzle3D {
 
       // Replace with real player asynchronously
       await this.loadRealPlayer();
+      this.placePlayer(this.player.x, this.player.y);
       this.start();
     } catch (error) {
       console.error("Failed to initialize game:", error);
@@ -212,12 +214,11 @@ class GridPuzzle3D {
   }
 
   private initMaterials(): void {
-    this.matFloor = new GridMaterial("grid", this.scene);
-    this.matFloor.majorUnitFrequency = 1;
-    this.matFloor.minorUnitVisibility = 0;
-    this.matFloor.gridRatio = this.TILE;
-    this.matFloor.mainColor = new Color3(0.3, 0.33, 0.38);
-    this.matFloor.lineColor = new Color3(0.18, 0.2, 0.24);
+    this.matFloor = new StandardMaterial("floor", this.scene);
+    const grassTexture = new Texture("assets/models/grass.png", this.scene);
+    grassTexture.uScale = this.W; // Repeat texture across width
+    grassTexture.vScale = this.H; // Repeat texture across height
+    this.matFloor.diffuseTexture = grassTexture;
 
     this.matWall = new StandardMaterial("wall", this.scene);
     this.matWall.diffuseColor = new Color3(0.32, 0.34, 0.4);
@@ -425,10 +426,10 @@ class GridPuzzle3D {
   private async createExternalKey(i: number, j: number): Promise<Mesh> {
     try {
       // Import the skeleton key GLB model
-      const result = await ImportMeshAsync("assets/models/squid_key.glb", this.scene);
+      const result = await ImportMeshAsync("assets/models/stone.glb", this.scene);
 
       if (!result.meshes || result.meshes.length === 0) {
-        console.warn(`No meshes found in skeleton_key.glb, falling back to procedural key`);
+        console.warn(`No meshes found in the path, falling back to procedural key`);
         return this.createRealisticKey(i, j);
       }
 
@@ -446,13 +447,16 @@ class GridPuzzle3D {
       result.meshes.forEach((mesh: AbstractMesh, index: number) => {
         if (mesh.name !== "__root__") {
           mesh.parent = keyGroup;
+          mesh.scaling = new Vector3(0.01, 0.01, 0.01); // Scale down if needed
+          mesh.rotation.z = 0; // Rotate to stand upright
+          mesh.position.z += 10; // Center position
         }
       });
 
       return keyGroup;
 
     } catch (error) {
-      console.error(`Failed to load skeleton_key.glb:`, error);
+      console.error(`Failed to load the path:`, error);
       console.log("Falling back to procedural key generation");
       return this.createRealisticKey(i, j);
     }
@@ -700,6 +704,7 @@ class GridPuzzle3D {
     this.scene.onBeforeRenderObservable.add(() => {
       const t = performance.now() * 0.001;
       for (const keyGroup of this.keys.values()) {
+        continue;
         // Rotate the entire key group (works for both external models and procedural keys)
         keyGroup.rotation.y = t * 2;
 

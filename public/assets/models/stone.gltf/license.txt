@@ -1,0 +1,11 @@
+Model Information:
+* title:	Simple Magic Stone Portal
+* source:	https://sketchfab.com/3d-models/simple-magic-stone-portal-dbd1fc7f51194a2fbddb08c7f5e11260
+* author:	somniumfelix (https://sketchfab.com/somniumfelix)
+
+Model License:
+* license type:	CC-BY-NC-4.0 (http://creativecommons.org/licenses/by-nc/4.0/)
+* requirements:	Author must be credited. No commercial use.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Simple Magic Stone Portal" (https://sketchfab.com/3d-models/simple-magic-stone-portal-dbd1fc7f51194a2fbddb08c7f5e11260) by somniumfelix (https://sketchfab.com/somniumfelix) licensed under CC-BY-NC-4.0 (http://creativecommons.org/licenses/by-nc/4.0/)
