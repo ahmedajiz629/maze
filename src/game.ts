@@ -86,7 +86,6 @@ class GridPuzzle3D {
   private doors = new Map<string, AbstractMesh>();
   private boxes = new Map<string, AbstractMesh>();
   private keys = new Map<string, AbstractMesh>();
-  private keyColors = new Map<string, string>(); // Track key colors by position
   private lava = new Map<string, AbstractMesh>();
 
   // UI elements
@@ -372,12 +371,6 @@ class GridPuzzle3D {
   private createRealisticKey(i: number, j: number): Mesh {
     const keyGroup = new Mesh(`keyGroup_${i}_${j}`, this.scene);
 
-    // Choose a random color for this key
-    const colorIndex = Math.floor(Math.random() * KEY_COLORS.length);
-    const keyColor = KEY_COLORS[colorIndex];
-
-    // Store the key color for this position
-    this.keyColors.set(this.keyOf(i, j), keyColor.name);
 
     // Key head (circular part)
     const keyHead = MeshBuilder.CreateTorus(
@@ -415,15 +408,6 @@ class GridPuzzle3D {
     tooth2.parent = keyGroup;
 
     // Apply the chosen color material
-    const keyMaterial = new StandardMaterial(`keyMat_${i}_${j}`, this.scene);
-    keyMaterial.emissiveColor = keyColor.emissive;
-    keyMaterial.diffuseColor = keyColor.diffuse;
-
-    keyHead.material = keyMaterial;
-    keyShaft.material = keyMaterial;
-    tooth1.material = keyMaterial;
-    tooth2.material = keyMaterial;
-
     return keyGroup;
   }
 
@@ -441,72 +425,13 @@ class GridPuzzle3D {
       const keyGroup = new Mesh(`externalKey_${i}_${j}`, this.scene);
 
       // Choose a random color for this key
-      const colorIndex = Math.floor(Math.random() * KEY_COLORS.length);
-      const keyColor = KEY_COLORS[colorIndex];
 
-      // Store the key color for this position
-      this.keyColors.set(this.keyOf(i, j), keyColor.name);
-      
 
       // Parent all imported meshes to our key group and apply color tint
       console.log(result.meshes.slice(1).map(m => m.material));
       result.meshes.forEach((mesh: AbstractMesh, index: number) => {
         if (mesh.name !== "__root__") {
           mesh.parent = keyGroup;
-          
-          // Preserve original material but apply color tint
-          if (mesh.material && mesh.material instanceof PBRMaterial) {
-            const originalMaterial = mesh.material as PBRMaterial;
-            
-            // Create a copy of the original material to avoid affecting other instances
-            const tintedMaterial = originalMaterial.clone(`tinted_${mesh.name}_${i}_${j}`);
-            
-            // Apply color tint to PBR material (use albedoColor instead of diffuseColor)
-            if (tintedMaterial.albedoColor) {
-              tintedMaterial.albedoColor = tintedMaterial.albedoColor.multiply(keyColor.diffuse);
-            } else {
-              tintedMaterial.albedoColor = keyColor.diffuse;
-            }
-            
-            // Add subtle emissive glow
-            if (tintedMaterial.emissiveColor) {
-              tintedMaterial.emissiveColor = tintedMaterial.emissiveColor.add(keyColor.emissive);
-            } else {
-              tintedMaterial.emissiveColor = keyColor.emissive;
-            }
-            
-            mesh.material = tintedMaterial;
-            console.log('PBR tinted')
-          } else if (mesh.material && mesh.material instanceof StandardMaterial) {
-            const originalMaterial = mesh.material as StandardMaterial;
-            
-            // Create a copy of the original material to avoid affecting other instances
-            const tintedMaterial = originalMaterial.clone(`tinted_${mesh.name}_${i}_${j}`);
-            
-            // Apply color tint by multiplying with the key color
-            if (tintedMaterial.diffuseColor) {
-              tintedMaterial.diffuseColor = tintedMaterial.diffuseColor.multiply(keyColor.diffuse);
-            } else {
-              tintedMaterial.diffuseColor = keyColor.diffuse;
-            }
-            
-            // Add subtle emissive glow
-            if (tintedMaterial.emissiveColor) {
-              tintedMaterial.emissiveColor = tintedMaterial.emissiveColor.add(keyColor.emissive);
-            } else {
-              tintedMaterial.emissiveColor = keyColor.emissive;
-            }
-            
-            mesh.material = tintedMaterial;
-            console.log('Standard tinted')
-          } else {
-            // If no material or unknown type, create a new PBR material
-            const newMaterial = new PBRMaterial(`keyMat_${mesh.name}_${i}_${j}`, this.scene);
-            newMaterial.emissiveColor = keyColor.emissive;
-            newMaterial.albedoColor = keyColor.diffuse;
-            mesh.material = newMaterial;
-            console.log('PBR replaced')
-          }
         }
       });
 
@@ -532,7 +457,7 @@ class GridPuzzle3D {
       { width: this.TILE * 0.95, height: this.TILE * 0.95 },
       this.scene
     );
-    
+
     // Rotate to lie flat on the ground
     lavaPlane.rotation.x = Math.PI / 2;
     lavaPlane.position.y = 0.01; // Slightly above ground to avoid z-fighting
@@ -540,11 +465,11 @@ class GridPuzzle3D {
     // Create material with animated GIF texture
     const lavaMaterial = new StandardMaterial(`lavaMat_${i}_${j}`, this.scene);
     const lavaTexture = new Texture("assets/models/lava.gif", this.scene);
-    
+
     lavaMaterial.diffuseTexture = lavaTexture;
     lavaMaterial.emissiveTexture = lavaTexture; // Make it glow
     lavaMaterial.emissiveColor = new Color3(0.3, 0.1, 0.05); // Subtle glow tint
-    
+
     lavaPlane.material = lavaMaterial;
 
     // Initialize GIF animation with material reference
@@ -563,14 +488,14 @@ class GridPuzzle3D {
 
       const response = await fetch(gifUrl);
       const imageDecoder = new (window as any).ImageDecoder({ data: response.body, type: 'image/gif' });
-      
+
       await imageDecoder.tracks.ready;
       await imageDecoder.completed;
 
       console.log(imageDecoder, `GIF has ${imageDecoder.tracks[0].frameCount} frames`);
 
       const maxFrame = imageDecoder.tracks[0].frameCount;
-      
+
       if (maxFrame <= 1) {
         console.log('GIF has only one frame, will be static');
         return;
@@ -582,39 +507,39 @@ class GridPuzzle3D {
       canvas.width = firstResult.image.displayWidth;
       canvas.height = firstResult.image.displayHeight;
       const ctx = canvas.getContext('2d');
-      
+
       if (!ctx) {
         console.error('Could not get canvas context');
         return;
       }
-      
+
       // Create the dynamic texture once
-      const dynamicTexture = new DynamicTexture(`lavaAnimated`, {width: canvas.width, height: canvas.height}, this.scene, false);
+      const dynamicTexture = new DynamicTexture(`lavaAnimated`, { width: canvas.width, height: canvas.height }, this.scene, false);
       const dynamicCtx = dynamicTexture.getContext();
-      
+
       // Set up the material with the dynamic texture
       material.diffuseTexture = dynamicTexture;
       material.emissiveTexture = dynamicTexture;
-      
+
       let imageIndex = 0;
       const render = async () => {
         try {
           const result = await imageDecoder.decode({ frameIndex: imageIndex });
-          
+
           // Draw frame to our canvas
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.drawImage(result.image, 0, 0);
-          
+
           // Copy canvas to dynamic texture
           dynamicCtx.clearRect(0, 0, canvas.width, canvas.height);
           dynamicCtx.drawImage(canvas, 0, 0);
           dynamicTexture.update();
-          
+
           imageIndex++;
           if (imageIndex >= maxFrame) {
             imageIndex = 0;
           }
-          
+
           // Use the frame duration from the GIF, with a minimum of 100ms
           const duration = Math.max(result.image.duration / 1000.0, 100);
           setTimeout(render, duration / 5);
@@ -622,9 +547,9 @@ class GridPuzzle3D {
           console.error('Error decoding GIF frame:', error);
         }
       };
-      
+
       await render();
-      
+
     } catch (error) {
       console.error('Failed to initialize GIF animation:', error);
     }
@@ -982,16 +907,8 @@ class GridPuzzle3D {
     // Key pickup
     if (this.keys.has(playerKey)) {
       // Get the key color before disposing
-      const keyColor = this.keyColors.get(playerKey);
-      if (keyColor) {
-        // Update color-specific count
-        const currentCount = this.player.keysByColor.get(keyColor) || 0;
-        this.player.keysByColor.set(keyColor, currentCount + 1);
-      }
-
       this.keys.get(playerKey)!.dispose();
       this.keys.delete(playerKey);
-      this.keyColors.delete(playerKey);
       this.player.keys++;
       this.updateHUD();
     }
@@ -1220,35 +1137,8 @@ class GridPuzzle3D {
       keysContainer.innerHTML = '<div style="color: #666; font-style: italic; font-size: 12px;">No keys collected</div>';
       return;
     }
+      keysContainer.innerHTML = '<div style="color: #fff; font-size: 12px;">' + this.player.keys + ' keys collected</div>';
 
-    // Create visual elements for each key color
-    for (const [colorName, count] of this.player.keysByColor.entries()) {
-      if (count > 0) {
-        const keyColor = KEY_COLORS.find(c => c.name === colorName);
-        if (keyColor) {
-          const keyItem = document.createElement("div");
-          keyItem.className = "key-item";
-          keyItem.style.borderColor = `rgb(${Math.floor(keyColor.emissive.r * 255)}, ${Math.floor(keyColor.emissive.g * 255)}, ${Math.floor(keyColor.emissive.b * 255)})`;
-
-          const colorDot = document.createElement("div");
-          colorDot.className = "key-color";
-          colorDot.style.backgroundColor = `rgb(${Math.floor(keyColor.emissive.r * 255)}, ${Math.floor(keyColor.emissive.g * 255)}, ${Math.floor(keyColor.emissive.b * 255)})`;
-          colorDot.style.color = `rgb(${Math.floor(keyColor.emissive.r * 255)}, ${Math.floor(keyColor.emissive.g * 255)}, ${Math.floor(keyColor.emissive.b * 255)})`;
-
-          keyItem.appendChild(colorDot);
-
-          // Only show count if there are multiple keys of the same color
-          if (count > 1) {
-            const countSpan = document.createElement("span");
-            countSpan.className = "key-count";
-            countSpan.textContent = count.toString();
-            keyItem.appendChild(countSpan);
-          }
-
-          keysContainer.appendChild(keyItem);
-        }
-      }
-    }
   }
 
   private showBanner(message: string): void {
