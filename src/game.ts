@@ -10,8 +10,11 @@ import {
   Mesh,
   StandardMaterial,
   AbstractMesh,
-  Observer
+  Observer,
+  SceneLoader,
+  ImportMeshAsync
 } from '@babylonjs/core';
+import '@babylonjs/loaders'; // This adds the loaders to the scene
 import { GridMaterial } from '@babylonjs/materials';
 import { Player, PlayerFactory } from './Player';
 
@@ -65,7 +68,7 @@ class GridPuzzle3D {
   private scene!: Scene;
   private canvas: HTMLCanvasElement;
   private camera!: ArcRotateCamera;
-  
+
   // Game state
   private readonly W: number;
   private readonly H: number;
@@ -73,7 +76,7 @@ class GridPuzzle3D {
   private playerFactory!: PlayerFactory;
   private spawnCell!: Position;
   private exitCell!: Position;
-  
+
   // Collections
   private blocked = new Set<string>();
   private doors = new Map<string, AbstractMesh>();
@@ -81,11 +84,11 @@ class GridPuzzle3D {
   private keys = new Map<string, AbstractMesh>();
   private keyColors = new Map<string, string>(); // Track key colors by position
   private lava = new Map<string, AbstractMesh>();
-  
+
   // UI elements
   private hudElement: HTMLElement;
   private bannerElement: HTMLElement;
-  
+
   // Materials
   private matFloor!: GridMaterial;
   private matWall!: StandardMaterial;
@@ -95,7 +98,7 @@ class GridPuzzle3D {
   private matLava!: StandardMaterial;
   private matExit!: StandardMaterial;
   private matPlayer!: StandardMaterial;
-  
+
   // Mesh templates
   private wallUnit!: Mesh;
   private boxUnit!: Mesh;
@@ -108,31 +111,44 @@ class GridPuzzle3D {
     this.canvas = document.getElementById("c") as HTMLCanvasElement;
     this.hudElement = document.getElementById("hud") as HTMLElement;
     this.bannerElement = document.getElementById("banner") as HTMLElement;
-    
+
     if (!this.canvas || !this.hudElement || !this.bannerElement) {
       throw new Error("Required HTML elements not found");
     }
-    
+
     this.initEngine();
     this.initScene();
     this.initMaterials();
     this.initGeometry();
-    this.initMap();
-    
-    // Create a temporary invisible player for camera setup
-    this.initTemporaryPlayer();
-    this.initCamera();
-    this.initInput();
-    
-    // Replace with real player asynchronously
-    this.loadRealPlayer().then(()=>this.start());
+
+    // Initialize map and load player asynchronously
+    this.initializeGameAsync();
+  }
+
+  private async initializeGameAsync(): Promise<void> {
+    try {
+      // Initialize the map (this will load all keys)
+      await this.initMap();
+
+      // Create a temporary invisible player for camera setup
+      this.initTemporaryPlayer();
+      this.initCamera();
+      this.initInput();
+
+      // Replace with real player asynchronously
+      await this.loadRealPlayer();
+      this.start();
+    } catch (error) {
+      console.error("Failed to initialize game:", error);
+      this.showBanner("Game initialization failed - please refresh the page");
+    }
   }
 
   private initTemporaryPlayer(): void {
     // Create a simple invisible placeholder for camera setup
     const tempMesh = MeshBuilder.CreateBox("tempPlayer", { size: 1 }, this.scene);
     tempMesh.visibility = 0; // Make it invisible
-    
+
     this.player = {
       x: this.spawnCell.x,
       y: this.spawnCell.y,
@@ -150,18 +166,18 @@ class GridPuzzle3D {
     try {
       // Load the real player
       const realPlayerMesh = await this.playerFactory.createRealisticPlayer();
-      
+
       // Replace the temporary player
       if (this.player.mesh) {
         this.player.mesh.dispose();
       }
-      
+
       this.player.mesh = realPlayerMesh;
       this.placePlayer(this.player.x, this.player.y);
-      
+
       // Update camera target
       this.camera.setTarget(realPlayerMesh.position);
-      
+
       this.showBanner("Player loaded! Use arrow keys or WASD to move.");
     } catch (error) {
       console.error("Failed to load real player:", error);
@@ -177,7 +193,7 @@ class GridPuzzle3D {
   private initEngine(): void {
     this.canvas.style.width = "100%";
     this.canvas.style.height = "100%";
-    
+
     this.engine = new Engine(this.canvas, true, {
       preserveDrawingBuffer: true,
       stencil: true,
@@ -190,7 +206,7 @@ class GridPuzzle3D {
 
     const light = new HemisphericLight("h", new Vector3(0, 1, 0), this.scene);
     light.intensity = 0.85;
-    
+
     // Initialize PlayerFactory after scene is created
     this.playerFactory = new PlayerFactory(this.scene);
   }
@@ -273,9 +289,11 @@ class GridPuzzle3D {
     this.keyUnit.isVisible = false;
   }
 
-  private initMap(): void {
+  private async initMap(): Promise<void> {
     let spawnFound = false;
     let exitFound = false;
+
+    const keyPromises: Promise<void>[] = [];
 
     for (let j = 0; j < this.H; j++) {
       for (let i = 0; i < this.W; i++) {
@@ -293,7 +311,7 @@ class GridPuzzle3D {
             this.createDoor(i, j, p);
             break;
           case "K":
-            this.createKey(i, j, p);
+            keyPromises.push(this.createKey(i, j, p));
             break;
           case "~":
             this.createLava(i, j, p);
@@ -310,6 +328,9 @@ class GridPuzzle3D {
         }
       }
     }
+
+    // Wait for all keys to load
+    await Promise.all(keyPromises);
 
     if (!spawnFound || !exitFound) {
       throw new Error("Map must include S (spawn) and E (exit).");
@@ -336,23 +357,23 @@ class GridPuzzle3D {
     this.blocked.add(this.keyOf(i, j));
   }
 
-  private createKey(i: number, j: number, p: Vector3): void {
-    // Create a more realistic key instead of a simple torus
-    const keyGroup = this.createRealisticKey(i, j);
+  private async createKey(i: number, j: number, p: Vector3): Promise<void> {
+    // Load the external skeleton key model
+    const keyGroup = await this.createExternalKey(i, j);
     keyGroup.position = p.add(new Vector3(0, this.TILE * 0.5, 0)); // Raise it higher to be more visible
     this.keys.set(this.keyOf(i, j), keyGroup);
   }
 
   private createRealisticKey(i: number, j: number): Mesh {
     const keyGroup = new Mesh(`keyGroup_${i}_${j}`, this.scene);
-    
+
     // Choose a random color for this key
     const colorIndex = Math.floor(Math.random() * KEY_COLORS.length);
     const keyColor = KEY_COLORS[colorIndex];
-    
+
     // Store the key color for this position
     this.keyColors.set(this.keyOf(i, j), keyColor.name);
-    
+
     // Key head (circular part)
     const keyHead = MeshBuilder.CreateTorus(
       `keyHead_${i}_${j}`,
@@ -361,7 +382,7 @@ class GridPuzzle3D {
     );
     keyHead.position.y = 0;
     keyHead.parent = keyGroup;
-    
+
     // Key shaft
     const keyShaft = MeshBuilder.CreateBox(
       `keyShaft_${i}_${j}`,
@@ -370,7 +391,7 @@ class GridPuzzle3D {
     );
     keyShaft.position = new Vector3(0, -this.TILE * 0.15, 0);
     keyShaft.parent = keyGroup;
-    
+
     // Key teeth
     const tooth1 = MeshBuilder.CreateBox(
       `keyTooth1_${i}_${j}`,
@@ -379,7 +400,7 @@ class GridPuzzle3D {
     );
     tooth1.position = new Vector3(0.04, -this.TILE * 0.25, 0);
     tooth1.parent = keyGroup;
-    
+
     const tooth2 = MeshBuilder.CreateBox(
       `keyTooth2_${i}_${j}`,
       { width: 0.03, height: 0.06, depth: 0.06 },
@@ -392,13 +413,49 @@ class GridPuzzle3D {
     const keyMaterial = new StandardMaterial(`keyMat_${i}_${j}`, this.scene);
     keyMaterial.emissiveColor = keyColor.emissive;
     keyMaterial.diffuseColor = keyColor.diffuse;
-    
+
     keyHead.material = keyMaterial;
     keyShaft.material = keyMaterial;
     tooth1.material = keyMaterial;
     tooth2.material = keyMaterial;
 
     return keyGroup;
+  }
+
+  private async createExternalKey(i: number, j: number): Promise<Mesh> {
+    try {
+      // Import the skeleton key GLB model
+      const result = await ImportMeshAsync("assets/models/squid_key.glb", this.scene);
+
+      if (!result.meshes || result.meshes.length === 0) {
+        console.warn(`No meshes found in skeleton_key.glb, falling back to procedural key`);
+        return this.createRealisticKey(i, j);
+      }
+
+      // Create a parent mesh for the imported model
+      const keyGroup = new Mesh(`externalKey_${i}_${j}`, this.scene);
+
+      // Choose a random color for this key
+      const colorIndex = Math.floor(Math.random() * KEY_COLORS.length);
+      const keyColor = KEY_COLORS[colorIndex];
+
+      // Store the key color for this position
+      this.keyColors.set(this.keyOf(i, j), keyColor.name);
+
+      // Parent all imported meshes to our key group and apply material
+      result.meshes.forEach((mesh: AbstractMesh, index: number) => {
+        if (mesh.name !== "__root__") {
+          mesh.parent = keyGroup;
+        }
+      });
+
+      return keyGroup;
+
+    } catch (error) {
+      console.error(`Failed to load skeleton_key.glb:`, error);
+      console.log("Falling back to procedural key generation");
+      return this.createRealisticKey(i, j);
+    }
   }
 
   private createLava(i: number, j: number, p: Vector3): void {
@@ -409,7 +466,7 @@ class GridPuzzle3D {
 
   private createRealisticLava(i: number, j: number): Mesh {
     const lavaGroup = new Mesh(`lavaGroup_${i}_${j}`, this.scene);
-    
+
     // Main lava pool (slightly depressed)
     const lavaPool = MeshBuilder.CreateBox(
       `lavaPool_${i}_${j}`,
@@ -418,18 +475,18 @@ class GridPuzzle3D {
     );
     lavaPool.position.y = -0.05;
     lavaPool.parent = lavaGroup;
-    
+
     // Create multiple bubbling spheres for realistic effect
     const bubbleCount = 5;
     const bubbles: Mesh[] = [];
-    
+
     for (let b = 0; b < bubbleCount; b++) {
       const bubble = MeshBuilder.CreateSphere(
         `lavaBubble_${i}_${j}_${b}`,
         { diameter: 0.1 + Math.random() * 0.2 },
         this.scene
       );
-      
+
       // Random position within the lava pool
       bubble.position = new Vector3(
         (Math.random() - 0.5) * this.TILE * 0.8,
@@ -439,42 +496,42 @@ class GridPuzzle3D {
       bubble.parent = lavaGroup;
       bubbles.push(bubble);
     }
-    
+
     // Enhanced lava material with animation
     const lavaMaterial = new StandardMaterial(`lavaPoolMat_${i}_${j}`, this.scene);
     lavaMaterial.diffuseColor = new Color3(0.9, 0.2, 0.1); // Bright red-orange
     lavaMaterial.emissiveColor = new Color3(1.0, 0.4, 0.1); // Glowing effect
     lavaMaterial.specularColor = new Color3(1.0, 0.6, 0.2); // Shiny surface
-    
+
     // Bubble material - more yellow-orange for heat
     const bubbleMaterial = new StandardMaterial(`lavaBubbleMat_${i}_${j}`, this.scene);
     bubbleMaterial.diffuseColor = new Color3(1.0, 0.5, 0.1); // Hot orange
     bubbleMaterial.emissiveColor = new Color3(1.0, 0.6, 0.2); // Very glowing
-    
+
     lavaPool.material = lavaMaterial;
     bubbles.forEach(bubble => bubble.material = bubbleMaterial);
-    
+
     // Add bubbling animation
     this.scene.onBeforeRenderObservable.add(() => {
       const time = performance.now() * 0.001;
-      
+
       // Animate bubbles - make them bob up and down at different rates
       bubbles.forEach((bubble, index) => {
         const speed = 1.5 + index * 0.3;
         const amplitude = 0.03 + index * 0.01;
         bubble.position.y = Math.abs(Math.sin(time * speed)) * amplitude;
-        
+
         // Slight horizontal movement for more realism
         const originalX = (Math.random() - 0.5) * this.TILE * 0.8;
         const originalZ = (Math.random() - 0.5) * this.TILE * 0.8;
         bubble.position.x = originalX + Math.sin(time * speed * 0.5) * 0.02;
         bubble.position.z = originalZ + Math.cos(time * speed * 0.7) * 0.02;
-        
+
         // Scale bubbles to simulate popping and reforming
         const scale = 0.8 + 0.4 * Math.abs(Math.sin(time * speed * 1.5));
         bubble.scaling = new Vector3(scale, scale, scale);
       });
-      
+
       // Make the main pool glow pulse
       const glowIntensity = 0.8 + 0.3 * Math.sin(time * 2);
       lavaMaterial.emissiveColor = new Color3(
@@ -483,7 +540,7 @@ class GridPuzzle3D {
         0.1 * glowIntensity
       );
     });
-    
+
     return lavaGroup;
   }
 
@@ -494,7 +551,7 @@ class GridPuzzle3D {
 
   private createRealisticExit(i: number, j: number): Mesh {
     const exitGroup = new Mesh(`exitGroup_${i}_${j}`, this.scene);
-    
+
     // Main exit platform
     const exitPlatform = MeshBuilder.CreateBox(
       `exitPlatform_${i}_${j}`,
@@ -503,7 +560,7 @@ class GridPuzzle3D {
     );
     exitPlatform.position.y = 0;
     exitPlatform.parent = exitGroup;
-    
+
     // Glowing border
     const exitBorder = MeshBuilder.CreateTorus(
       `exitBorder_${i}_${j}`,
@@ -512,7 +569,7 @@ class GridPuzzle3D {
     );
     exitBorder.position.y = 0.08;
     exitBorder.parent = exitGroup;
-    
+
     // Central glowing orb
     const exitOrb = MeshBuilder.CreateSphere(
       `exitOrb_${i}_${j}`,
@@ -521,7 +578,7 @@ class GridPuzzle3D {
     );
     exitOrb.position.y = 0.25;
     exitOrb.parent = exitGroup;
-    
+
     // Floating rings around the orb
     const ring1 = MeshBuilder.CreateTorus(
       `exitRing1_${i}_${j}`,
@@ -530,7 +587,7 @@ class GridPuzzle3D {
     );
     ring1.position.y = 0.25;
     ring1.parent = exitGroup;
-    
+
     const ring2 = MeshBuilder.CreateTorus(
       `exitRing2_${i}_${j}`,
       { diameter: 0.8, thickness: 0.015, tessellation: 24 },
@@ -538,40 +595,40 @@ class GridPuzzle3D {
     );
     ring2.position.y = 0.25;
     ring2.parent = exitGroup;
-    
+
     // Materials
     const exitMaterial = new StandardMaterial(`exitMat_${i}_${j}`, this.scene);
     exitMaterial.diffuseColor = new Color3(0.2, 0.8, 0.3); // Green
     exitMaterial.emissiveColor = new Color3(0.3, 0.9, 0.4); // Glowing green
-    
+
     const orbMaterial = new StandardMaterial(`exitOrbMat_${i}_${j}`, this.scene);
     orbMaterial.diffuseColor = new Color3(0.4, 1.0, 0.5); // Bright green
     orbMaterial.emissiveColor = new Color3(0.6, 1.0, 0.7); // Very bright glow
-    
+
     const ringMaterial = new StandardMaterial(`exitRingMat_${i}_${j}`, this.scene);
     ringMaterial.diffuseColor = new Color3(0.8, 1.0, 0.8); // Light green
     ringMaterial.emissiveColor = new Color3(0.5, 1.0, 0.6); // Bright glow
     ringMaterial.alpha = 0.7; // Semi-transparent
-    
+
     exitPlatform.material = exitMaterial;
     exitBorder.material = exitMaterial;
     exitOrb.material = orbMaterial;
     ring1.material = ringMaterial;
     ring2.material = ringMaterial;
-    
+
     // Animation
     this.scene.onBeforeRenderObservable.add(() => {
       const time = performance.now() * 0.001;
-      
+
       // Rotate rings in opposite directions
       ring1.rotation.y = time * 0.8;
       ring2.rotation.y = -time * 1.2;
       ring1.rotation.x = Math.sin(time * 0.5) * 0.2;
       ring2.rotation.x = Math.cos(time * 0.7) * 0.15;
-      
+
       // Bob the orb up and down
       exitOrb.position.y = 0.25 + Math.sin(time * 2) * 0.05;
-      
+
       // Pulsing glow effect
       const glowIntensity = 0.8 + 0.4 * Math.sin(time * 3);
       orbMaterial.emissiveColor = new Color3(
@@ -580,14 +637,14 @@ class GridPuzzle3D {
         0.7 * glowIntensity
       );
     });
-    
+
     return exitGroup;
   }
 
   private async initPlayer(): Promise<void> {
     // Create a more realistic player character with directional features
     const playerMesh = await this.playerFactory.createRealisticPlayer();
-    
+
     this.player = {
       x: this.spawnCell.x,
       y: this.spawnCell.y,
@@ -611,25 +668,25 @@ class GridPuzzle3D {
       Vector3.Zero(), // Initial target
       this.scene
     );
-    
+
     // Enable mouse controls for camera rotation
     this.camera.attachControl(this.canvas, true);
-    
+
     // Configure mouse rotation sensitivity (lower = more sensitive)
     this.camera.angularSensibilityX = 1000; // Horizontal rotation sensitivity
     this.camera.angularSensibilityY = 1000; // Vertical rotation sensitivity
-    
+
     // Configure wheel zoom sensitivity
     this.camera.wheelPrecision = 20;
-    
+
     // Set rotation limits to prevent camera from going too high or low
     this.camera.lowerBetaLimit = 0.1; // Minimum vertical angle (prevent going below ground)
     this.camera.upperBetaLimit = Math.PI / 2.2; // Maximum vertical angle (prevent going too high)
-    
+
     // Set distance limits
     this.camera.lowerRadiusLimit = 5;  // Minimum zoom distance
     this.camera.upperRadiusLimit = 30; // Maximum zoom distance
-    
+
     // Set the target to follow the player
     if (this.player && this.player.mesh) {
       this.camera.setTarget(this.player.mesh.position);
@@ -643,12 +700,17 @@ class GridPuzzle3D {
     this.scene.onBeforeRenderObservable.add(() => {
       const t = performance.now() * 0.001;
       for (const keyGroup of this.keys.values()) {
-        // Rotate the key
+        // Rotate the entire key group (works for both external models and procedural keys)
         keyGroup.rotation.y = t * 2;
+
         // Add floating motion
         const baseY = this.TILE * 0.5;
         const float = Math.sin(t * 3) * 0.1;
         keyGroup.position.y = baseY + float;
+
+        // Additional rotation around other axes for more dynamic movement
+        keyGroup.rotation.x = Math.sin(t * 1.5) * 0.2;
+        keyGroup.rotation.z = Math.cos(t * 1.8) * 0.15;
       }
     });
   }
@@ -692,7 +754,7 @@ class GridPuzzle3D {
     this.player.rotation += deltaRotation;
     // Normalize rotation to 0-2π range
     this.player.rotation = ((this.player.rotation % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
-    
+
     // Apply rotation to the mesh
     this.player.mesh.rotation.y = -this.player.rotation;
   }
@@ -701,11 +763,11 @@ class GridPuzzle3D {
     // Calculate the direction vector based on player rotation
     const dx = Math.cos(this.player.rotation);
     const dy = Math.sin(this.player.rotation);
-    
+
     // Round to get grid-aligned movement
     const gridDx = Math.round(dx);
     const gridDy = Math.round(dy);
-    
+
     this.attemptMove(gridDx, gridDy);
   }
 
@@ -809,13 +871,13 @@ class GridPuzzle3D {
     const observer = this.scene.onBeforeRenderObservable.add(() => {
       const elapsed = performance.now() - startTime;
       const progress = Math.min(elapsed / durationMs, 1);
-      
+
       // Smooth easing
       const easedProgress = 0.5 - 0.5 * Math.cos(Math.PI * progress);
-      
+
       // Update player position
       this.player.mesh.position = Vector3.Lerp(startPos, targetPos, easedProgress);
-      
+
       // Update camera position and target to follow
       const cameraOffset = movementDelta.scale(easedProgress);
       this.camera.position = initialCameraPosition.add(cameraOffset);
@@ -840,7 +902,7 @@ class GridPuzzle3D {
         const currentCount = this.player.keysByColor.get(keyColor) || 0;
         this.player.keysByColor.set(keyColor, currentCount + 1);
       }
-      
+
       this.keys.get(playerKey)!.dispose();
       this.keys.delete(playerKey);
       this.keyColors.delete(playerKey);
@@ -857,11 +919,99 @@ class GridPuzzle3D {
 
     // Exit check
     if (this.player.x === this.exitCell.x && this.player.y === this.exitCell.y) {
-      this.showBanner("You win! Press R to play again.");
+      this.triggerWinAnimation();
       return;
     }
 
     this.showBanner("");
+  }
+
+  private triggerWinAnimation(): void {
+    this.player.moving = true; // Prevent further movement during animation
+
+    // Find the exit group to enhance its glow
+    const exitKey = this.keyOf(this.exitCell.x, this.exitCell.y);
+    const exitGroup = this.scene.getMeshByName(`exitGroup_${this.exitCell.x}_${this.exitCell.y}`);
+
+    // Enhance exit glow animation
+    if (exitGroup) {
+      this.enhanceExitGlow(exitGroup);
+    }
+
+    // Animate player rotating upward
+    this.animatePlayerWin();
+
+    // Show win message after a delay
+    setTimeout(() => {
+      this.showBanner("🎉 You win! Press R to play again. 🎉");
+    }, 1000);
+  }
+
+  private enhanceExitGlow(exitGroup: AbstractMesh): void {
+    const orbMesh = exitGroup.getChildMeshes().find(mesh => mesh.name.includes('exitOrb'));
+    const platformMesh = exitGroup.getChildMeshes().find(mesh => mesh.name.includes('exitPlatform'));
+
+    if (orbMesh && orbMesh.material) {
+      const orbMaterial = orbMesh.material as StandardMaterial;
+      const originalEmissive = orbMaterial.emissiveColor.clone();
+
+      // Create intense glow animation
+      const startTime = performance.now();
+      const glowObserver = this.scene.onBeforeRenderObservable.add(() => {
+        const elapsed = (performance.now() - startTime) * 0.001;
+        const intensity = 2 + Math.sin(elapsed * 8) * 0.5; // Fast pulsing
+
+        orbMaterial.emissiveColor = new Color3(
+          originalEmissive.r * intensity,
+          originalEmissive.g * intensity,
+          originalEmissive.b * intensity
+        );
+
+        // Stop after 3 seconds
+        if (elapsed > 3) {
+          this.scene.onBeforeRenderObservable.remove(glowObserver);
+          orbMaterial.emissiveColor = originalEmissive;
+        }
+      });
+    }
+  }
+
+  private animatePlayerWin(): void {
+    const startTime = performance.now();
+    const duration = 1000; // 2 seconds
+    const startRotation = this.player.mesh.rotation.clone();
+
+    // Target rotation: rotate upward (around X axis)
+    const targetRotation = new Vector3(
+      startRotation.x, // Rotate 90 degrees upward
+      startRotation.y,
+      startRotation.z - Math.PI / 2
+    );
+
+    // Also lift the player up slightly
+    const startPosition = this.player.mesh.position.clone();
+    const targetPosition = startPosition.add(new Vector3(0, 1.5, 0));
+
+    const winObserver = this.scene.onBeforeRenderObservable.add(() => {
+      const elapsed = performance.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      // Smooth easing for the rotation
+      const easedProgress = 0.5 - 0.5 * Math.cos(Math.PI * progress);
+
+      // Interpolate rotation
+      this.player.mesh.rotation = Vector3.Lerp(startRotation, targetRotation, easedProgress);
+
+      // Interpolate position (slight upward movement)
+      this.player.mesh.position = Vector3.Lerp(startPosition, targetPosition, easedProgress);
+
+      // Add a gentle spinning effect around Y axis for extra flair
+      this.player.mesh.rotation.y = startRotation.y + easedProgress * Math.PI * 2;
+
+      if (progress >= 1) {
+        this.scene.onBeforeRenderObservable.remove(winObserver);
+      }
+    });
   }
 
   private async resetGame(): Promise<void> {
@@ -886,20 +1036,20 @@ class GridPuzzle3D {
   private placePlayer(x: number, y: number): void {
     // Get the old player position before moving
     const oldPosition = this.player.mesh.position.clone();
-    
+
     // Move the player to new position
     const newPosition = this.cellToWorld(x, y, this.TILE * 0.5);
     this.player.mesh.position = newPosition;
-    
+
     // Calculate the movement delta
     const deltaPosition = newPosition.subtract(oldPosition);
-    
+
     // Translate the camera by the same amount to follow the player
     if (this.camera) {
       // Get current camera target and position
       const currentTarget = this.camera.getTarget();
       const currentPosition = this.camera.position.clone();
-      
+
       // Move both target and camera position by the same delta
       this.camera.setTarget(currentTarget.add(deltaPosition));
       this.camera.position = currentPosition.add(deltaPosition);
@@ -918,12 +1068,12 @@ class GridPuzzle3D {
     const observer = this.scene.onBeforeRenderObservable.add(() => {
       const elapsed = performance.now() - startTime;
       const progress = Math.min(elapsed / durationMs, 1);
-      
+
       // Smooth easing
       const easedProgress = 0.5 - 0.5 * Math.cos(Math.PI * progress);
-      
+
       mesh.position = Vector3.Lerp(startPos, targetPos, easedProgress);
-      
+
       // Special handling for player movement
       if (mesh === this.player.mesh) {
         // Face the movement direction
@@ -932,11 +1082,11 @@ class GridPuzzle3D {
           const targetRotationY = Math.atan2(moveDirection.x, moveDirection.z);
           mesh.rotation.z = targetRotationY + Math.PI / 2; // Adjust for model orientation
         }
-        
+
         // Add walking bob animation
         const bob = this.player.moving ? 0.05 * Math.sin(12 * Math.PI * easedProgress) : 0;
         mesh.position.y = this.TILE * 0.5 + bob;
-        
+
         // Add slight walking sway
         if (this.player.moving) {
           const sway = 0.02 * Math.sin(8 * Math.PI * easedProgress);
@@ -945,7 +1095,7 @@ class GridPuzzle3D {
           mesh.rotation.x = -Math.PI / 2;
         }
       }
-      
+
       if (progress >= 1) {
         if (observer) {
           this.scene.onBeforeRenderObservable.remove(observer);
@@ -975,16 +1125,16 @@ class GridPuzzle3D {
   private updateHUD(): void {
     const keysContainer = document.getElementById("keys-container");
     if (!keysContainer) return;
-    
+
     // Clear existing keys
     keysContainer.innerHTML = "";
-    
+
     // If no keys, show empty state
     if (this.player.keys === 0) {
       keysContainer.innerHTML = '<div style="color: #666; font-style: italic; font-size: 12px;">No keys collected</div>';
       return;
     }
-    
+
     // Create visual elements for each key color
     for (const [colorName, count] of this.player.keysByColor.entries()) {
       if (count > 0) {
@@ -993,14 +1143,14 @@ class GridPuzzle3D {
           const keyItem = document.createElement("div");
           keyItem.className = "key-item";
           keyItem.style.borderColor = `rgb(${Math.floor(keyColor.emissive.r * 255)}, ${Math.floor(keyColor.emissive.g * 255)}, ${Math.floor(keyColor.emissive.b * 255)})`;
-          
+
           const colorDot = document.createElement("div");
           colorDot.className = "key-color";
           colorDot.style.backgroundColor = `rgb(${Math.floor(keyColor.emissive.r * 255)}, ${Math.floor(keyColor.emissive.g * 255)}, ${Math.floor(keyColor.emissive.b * 255)})`;
           colorDot.style.color = `rgb(${Math.floor(keyColor.emissive.r * 255)}, ${Math.floor(keyColor.emissive.g * 255)}, ${Math.floor(keyColor.emissive.b * 255)})`;
-          
+
           keyItem.appendChild(colorDot);
-          
+
           // Only show count if there are multiple keys of the same color
           if (count > 1) {
             const countSpan = document.createElement("span");
@@ -1008,7 +1158,7 @@ class GridPuzzle3D {
             countSpan.textContent = count.toString();
             keyItem.appendChild(countSpan);
           }
-          
+
           keysContainer.appendChild(keyItem);
         }
       }
