@@ -41,7 +41,7 @@ const KEY_COLORS = [
 class GridPuzzle3D {
   private readonly MAP = [
     "...#################",
-    ".S....#...........E#",
+    ".S.K..#...........E#",
     "#~##.#.#####.#######",
     "#~...#.....#.......#",
     "###.###.#.#.###.#..#",
@@ -414,7 +414,7 @@ class GridPuzzle3D {
   private async createExternalKey(i: number, j: number): Promise<Mesh> {
     try {
       // Import the skeleton key GLB model
-      const result = await ImportMeshAsync("assets/models/squid_key.glb", this.scene);
+      const result = await ImportMeshAsync("assets/models/minecraft_key.glb", this.scene);
 
       if (!result.meshes || result.meshes.length === 0) {
         console.warn(`No meshes found in the path, falling back to procedural key`);
@@ -430,12 +430,14 @@ class GridPuzzle3D {
       // Parent all imported meshes to our key group and apply color tint
       console.log(result.meshes.slice(1).map(m => m.material));
       result.meshes.forEach((mesh: AbstractMesh, index: number) => {
-        if (mesh.name !== "__root__") {
+        if (mesh.name === "__root__") {
           mesh.parent = keyGroup;
         }
       });
-
-      return keyGroup;
+      const keyGroup2 = new Mesh(`externalKey_${i}_${j}_`, this.scene);
+      keyGroup.rotation.z = Math.PI / 2; // Rotate 90 degrees around Y axis
+      keyGroup.parent = keyGroup2;
+      return keyGroup2;
 
     } catch (error) {
       console.error(`Failed to load the path:`, error);
@@ -1134,10 +1136,10 @@ class GridPuzzle3D {
 
     // If no keys, show empty state
     if (this.player.keys === 0) {
-      keysContainer.innerHTML = '<div style="color: #666; font-style: italic; font-size: 12px;">No keys collected</div>';
+      keysContainer.innerHTML = '<div style="color: #666; font-style: italic; font-size: 12px;">Empty</div>';
       return;
     }
-      keysContainer.innerHTML = '<div style="color: #fff; font-size: 12px;">' + this.player.keys + ' keys collected</div>';
+    keysContainer.innerHTML = '<div style="display: flex"><img width=30 src="/assets/models/key.png">' + this.player.keys + '</div>';
 
   }
 
