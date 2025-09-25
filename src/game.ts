@@ -298,6 +298,7 @@ class GridPuzzle3D {
     let exitFound = false;
 
     const keyPromises: Promise<void>[] = [];
+    const doorPromises: Promise<void>[] = [];
 
     for (let j = 0; j < this.H; j++) {
       for (let i = 0; i < this.W; i++) {
@@ -312,7 +313,7 @@ class GridPuzzle3D {
             this.createBox(i, j, p);
             break;
           case "D":
-            this.createDoor(i, j, p);
+            doorPromises.push(this.createDoor(i, j, p));
             break;
           case "K":
             keyPromises.push(this.createKey(i, j, p));
@@ -333,8 +334,8 @@ class GridPuzzle3D {
       }
     }
 
-    // Wait for all keys to load
-    await Promise.all(keyPromises);
+    // Wait for all keys and doors to load
+    await Promise.all([...keyPromises, ...doorPromises]);
 
     if (!spawnFound || !exitFound) {
       throw new Error("Map must include S (spawn) and E (exit).");
@@ -354,11 +355,48 @@ class GridPuzzle3D {
     this.blocked.add(this.keyOf(i, j));
   }
 
-  private createDoor(i: number, j: number, p: Vector3): void {
-    const inst = this.doorUnit.createInstance(`d_${i}_${j}`);
-    inst.position = p.add(new Vector3(0, this.WALL_H / 2, 0));
-    this.doors.set(this.keyOf(i, j), inst);
-    this.blocked.add(this.keyOf(i, j));
+  private async createDoor(i: number, j: number, p: Vector3): Promise<void> {
+    try {
+      // Import the stone GLB model for the door
+      const result = await ImportMeshAsync("assets/models/door.glb", this.scene);
+
+      if (!result.meshes || result.meshes.length === 0) {
+        console.warn(`No meshes found, falling back to procedural door`);
+        const inst = this.doorUnit.createInstance(`d_${i}_${j}`);
+        inst.position = p.add(new Vector3(0, this.WALL_H / 2, 0));
+        this.doors.set(this.keyOf(i, j), inst);
+        this.blocked.add(this.keyOf(i, j));
+        return;
+      }
+
+      // Create a parent mesh for the imported stone door model
+      const doorGroup_ = new Mesh(`stoneDoor_${i}_${j}_`, this.scene);
+      doorGroup_.position = p.add(new Vector3(this.TILE * 0.25, this.TILE * 0.5, this.TILE * 0.25));
+      doorGroup_.rotation.y = 0; // -Math.PI / 2 If open
+      // Parent all imported meshes to our door group
+      result.meshes.forEach((mesh: AbstractMesh, index: number) => {
+        if (mesh.name === "__root__") {
+          mesh.parent = doorGroup_;
+          // Scale the door to fit the tile size
+          const x = 3.5
+          mesh.scaling = new Vector3(x, x, x); // Adjust scaling as needed
+          mesh.position = new Vector3(.9 - this.TILE * 0.25, -1.5, 1 - this.TILE * 0.25); // Adjust scaling as needed
+        }
+      });
+
+      const doorGroup = new Mesh(`stoneDoor_${i}_${j}_`, this.scene);
+      doorGroup_.parent = doorGroup;
+      this.doors.set(this.keyOf(i, j), doorGroup);
+      this.blocked.add(this.keyOf(i, j));
+
+    } catch (error) {
+      console.error(`Failed to load stone.glb for door:`, error);
+      // Fallback to original door
+      const inst = this.doorUnit.createInstance(`d_${i}_${j}`);
+      inst.position = p.add(new Vector3(0, this.WALL_H / 2, 0));
+      this.doors.set(this.keyOf(i, j), inst);
+      this.blocked.add(this.keyOf(i, j));
+    }
   }
 
   private async createKey(i: number, j: number, p: Vector3): Promise<void> {
