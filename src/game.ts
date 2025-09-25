@@ -370,7 +370,7 @@ class GridPuzzle3D {
       }
 
       // Create a parent mesh for the imported stone door model
-      const doorGroup_ = new Mesh(`stoneDoor_${i}_${j}_`, this.scene);
+      const doorGroup_ = new Mesh(`stoneDoor_${i}_${j}$`, this.scene);
       doorGroup_.position = p.add(new Vector3(this.TILE * 0.25, this.TILE * 0.5, this.TILE * 0.25));
       doorGroup_.rotation.y = 0; // -Math.PI / 2 If open
       // Parent all imported meshes to our door group
@@ -384,7 +384,7 @@ class GridPuzzle3D {
         }
       });
 
-      const doorGroup = new Mesh(`stoneDoor_${i}_${j}_`, this.scene);
+      const doorGroup = new Mesh(`stoneDoor_${i}_${j}`, this.scene);
       doorGroup_.parent = doorGroup;
       this.doors.set(this.keyOf(i, j), doorGroup);
       this.blocked.add(this.keyOf(i, j));
@@ -460,7 +460,7 @@ class GridPuzzle3D {
       }
 
       // Create a parent mesh for the imported model
-      const keyGroup = new Mesh(`externalKey_${i}_${j}`, this.scene);
+      const keyGroup = new Mesh(`externalKey_${i}_${j}_`, this.scene);
 
       // Choose a random color for this key
 
@@ -472,7 +472,7 @@ class GridPuzzle3D {
           mesh.parent = keyGroup;
         }
       });
-      const keyGroup2 = new Mesh(`externalKey_${i}_${j}_`, this.scene);
+      const keyGroup2 = new Mesh(`externalKey_${i}_${j}`, this.scene);
       keyGroup.rotation.z = Math.PI / 2; // Rotate 90 degrees around Y axis
       keyGroup.parent = keyGroup2;
       return keyGroup2;
@@ -795,6 +795,10 @@ class GridPuzzle3D {
         // Move forward in the direction the player is facing
         this.movePlayerForward();
         break;
+      case "t":
+        // Toggle/Use action (open doors)
+        this.useAction();
+        break;
       // Remove down/backward movement
       default:
         return;
@@ -822,6 +826,69 @@ class GridPuzzle3D {
     this.attemptMove(gridDx, gridDy);
   }
 
+  private useAction(): void {
+    // Calculate the position directly in front of the player
+    const dx = Math.cos(this.player.rotation);
+    const dy = Math.sin(this.player.rotation);
+    const gridDx = Math.round(dx);
+    const gridDy = Math.round(dy);
+    
+    const targetX = this.player.x + gridDx;
+    const targetY = this.player.y + gridDy;
+    const targetKey = this.keyOf(targetX, targetY);
+
+    // Check if there's a door in front of the player
+    if (this.doors.has(targetKey)) {
+      if (this.player.keys > 0) {
+        this.player.keys--;
+        this.updateHUD();
+        
+        // Get the door mesh and open it by rotating
+        const doorMesh = this.doors.get(targetKey)!;
+        this.openDoor(doorMesh);
+        
+        // Remove the door from blocked tiles so player can pass through
+        this.doors.delete(targetKey);
+        this.blocked.delete(targetKey);
+        
+        this.showBanner("Door opened!");
+      } else {
+        this.showBanner("You need a key to open this door!");
+      }
+    } else {
+      this.showBanner("There's nothing to use here.");
+    }
+  }
+
+  private openDoor(doorMesh: AbstractMesh): void {
+    // Find the inner mesh (the actual door model) and rotate it
+    const doorGroup = doorMesh as Mesh;
+    const innerDoorMesh = doorGroup.getChildMeshes().find(mesh => mesh.name.endsWith('$'));
+    
+    if (innerDoorMesh) {
+      // Animate the door opening by rotating it
+      const startRotation = innerDoorMesh.rotation.y;
+      const targetRotation = startRotation - Math.PI / 2;
+      const startTime = performance.now();
+      const duration = 500; // 500ms animation
+      
+      const observer = this.scene.onBeforeRenderObservable.add(() => {
+        const elapsed = performance.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Smooth easing
+        const easedProgress = 0.5 - 0.5 * Math.cos(Math.PI * progress);
+        
+        // Interpolate rotation
+        innerDoorMesh.rotation.y = startRotation + (targetRotation - startRotation) * easedProgress;
+        
+        if (progress >= 1) {
+          this.scene.onBeforeRenderObservable.remove(observer);
+        }
+      });
+    }
+  }
+
   private attemptMove(dx: number, dy: number): void {
     const nx = this.player.x + dx;
     const ny = this.player.y + dy;
@@ -830,17 +897,10 @@ class GridPuzzle3D {
 
     const targetKey = this.keyOf(nx, ny);
 
-    // Handle door interaction
+    // Doors now block movement - they must be opened with T key first
     if (this.doors.has(targetKey)) {
-      if (this.player.keys > 0) {
-        this.player.keys--;
-        this.updateHUD();
-        this.doors.get(targetKey)!.dispose();
-        this.doors.delete(targetKey);
-        this.blocked.delete(targetKey);
-      } else {
-        return; // Can't open door without key
-      }
+      this.showBanner("Press T to open the door!");
+      return;
     }
 
     // Handle box pushing
