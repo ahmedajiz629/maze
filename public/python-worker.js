@@ -2,29 +2,50 @@
 let pyodide = null;
 let gameControllerReady = false;
 
-// Helper function to call game methods via message passing
-async function callGameMethod(method, ...args) {
-  return new Promise((resolve) => {
-    const messageId = Math.random().toString(36).substr(2, 9);
-    
-    // Set up listener for response
-    const responseHandler = (e) => {
-      if (e.data.type === 'gameMethodResult' && e.data.messageId === messageId) {
-        self.removeEventListener('message', responseHandler);
-        resolve(e.data.result);
+// Helper function to call game methods via message passing (synchronous blocking)
+function callGameMethodSync(method, ...args) {
+  const messageId = Math.random().toString(36).substr(2, 9);
+  let result = null;
+  let completed = false;
+  let error = null;
+  
+  // Set up listener for response
+  const responseHandler = (e) => {
+    if (e.data.type === 'gameMethodResult' && e.data.messageId === messageId) {
+      self.removeEventListener('message', responseHandler);
+      if (e.data.error) {
+        error = e.data.error;
+      } else {
+        result = e.data.result;
       }
-    };
-    
-    self.addEventListener('message', responseHandler);
-    
-    // Send request to main thread
-    postMessage({
-      type: 'callGameMethod',
-      messageId,
-      method,
-      args
-    });
+      completed = true;
+    }
+  };
+  
+  self.addEventListener('message', responseHandler);
+  
+  // Send request to main thread
+  postMessage({
+    type: 'callGameMethod',
+    messageId,
+    method,
+    args
   });
+  
+  // Busy wait until response (synchronous blocking)
+  while (!completed) {
+    // Small delay to prevent excessive CPU usage
+    const start = Date.now();
+    while (Date.now() - start < 10) {
+      // Busy wait for 10ms
+    }
+  }
+  
+  if (error) {
+    throw new Error(error);
+  }
+  
+  return result;
 }
 
 // Load Pyodide in the worker
@@ -34,41 +55,44 @@ async function initPyodide() {
     pyodide = await loadPyodide();
     
     // Make the game method caller available globally
-    pyodide.globals.set("callGameMethod", callGameMethod);
+    pyodide.globals.set("callGameMethodSync", callGameMethodSync);
     
     // Define Python functions that call game methods
     await pyodide.runPython(`
-import asyncio
 import time
 from pyodide.ffi import create_proxy
 
-async def step():
+def step():
     """Move player forward"""
     if gameControllerReady:
-        await callGameMethod('moveForward')
+        return callGameMethodSync('moveForward')
     else:
         print("Game not ready yet")
+        return None
 
-async def left():
+def left():
     """Turn player left"""
     if gameControllerReady:
-        await callGameMethod('turnLeft')
+        return callGameMethodSync('turnLeft')
     else:
         print("Game not ready yet")
+        return None
 
-async def right():
+def right():
     """Turn player right"""
     if gameControllerReady:
-        await callGameMethod('turnRight')
+        return callGameMethodSync('turnRight')
     else:
         print("Game not ready yet")
+        return None
 
-async def toggle():
+def toggle():
     """Use/interact with items"""
     if gameControllerReady:
-        await callGameMethod('useAction')
+        return callGameMethodSync('useAction')
     else:
         print("Game not ready yet")
+        return None
 
 def sleep(seconds):
     """Sleep function that works in web worker"""
@@ -77,7 +101,7 @@ def sleep(seconds):
 
 print("Game controller functions ready!")
 print("Available commands: step(), left(), right(), toggle(), sleep()")
-print("Note: These are async functions, use 'await' or run with asyncio.create_task()")
+print("Note: These functions are blocking/synchronous and return actual values!")
     `);
     
     postMessage({ type: 'ready', message: 'Pyodide initialized! Game controller ready.\n' });
@@ -120,10 +144,9 @@ sys.stdout = StringIO()
         const code = data.code;
         let result;
         
-        // Check if the code contains await expressions or game functions
-        if (code.includes('await') || code.includes('step()') || code.includes('left()') || 
-            code.includes('right()') || code.includes('toggle()') || code.includes('sleep(')) {
-          // Wrap the code in an async function and run it
+        // Check if the code contains explicit await expressions (but not our game functions)
+        if (code.includes('await') && !code.match(/^(step|left|right|toggle|sleep)\(\)$/)) {
+          // Only wrap in async if there are explicit await calls
           const asyncCode = `
 async def _temp_async_func():
 ${code.split('\n').map(line => '    ' + line).join('\n')}
@@ -134,7 +157,7 @@ result
           `;
           result = await pyodide.runPythonAsync(asyncCode);
         } else {
-          // Run synchronous code normally
+          // Run synchronous code - this includes our game functions
           result = pyodide.runPython(code);
         }
         
