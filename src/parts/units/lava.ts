@@ -25,7 +25,12 @@ export const makeLava = (scene: Scene, config: { TILE: number }) => {
   lavaPlane.material = lavaMaterial;
 
   // Initialize GIF animation with material reference
-  initGifAnimation(scene, lavaMaterial, "assets/models/lava.gif");
+  const teardown = initGifAnimation(scene, lavaMaterial, "assets/models/lava.gif");
+  lavaPlane.onDisposeObservable.add(() => {
+    teardown.then((cb) => {
+      cb();
+    });
+  });
 
   return lavaPlane;
 

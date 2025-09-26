@@ -7,9 +7,6 @@ export async function initGifAnimation(scene: Scene, material: StandardMaterial,
     throw new Error('ImageDecoder not supported');
   }
 
-
-
-
   const response = await fetch(gifUrl);
   const imageDecoder = new (window as any).ImageDecoder({ data: response.body, type: 'image/gif' });
 

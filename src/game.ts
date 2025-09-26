@@ -182,9 +182,7 @@ class GridPuzzle3D {
   // Public methods for Python REPL control
   public async moveForward(): Promise<void> {
     if (this.player.moving) return;
-    return new Promise((resolve) => {
-      this.movePlayerForwardAsync(resolve);
-    });
+    return this.movePlayerForwardAsync();
   }
 
   public async turnLeft(): Promise<void> {
@@ -239,7 +237,7 @@ class GridPuzzle3D {
     });
   }
 
-  private movePlayerForwardAsync(onComplete: () => void): void {
+  private async movePlayerForwardAsync() {
     // Calculate the direction vector based on player rotation
     const dx = Math.cos(this.player.rotation);
     const dy = Math.sin(this.player.rotation);
@@ -248,10 +246,10 @@ class GridPuzzle3D {
     const gridDx = Math.round(dx);
     const gridDy = Math.round(dy);
 
-    this.attemptMoveAsync(gridDx, gridDy, onComplete);
+    await this.attemptMoveAsync(gridDx, gridDy);
   }
 
-  public async useAction(): Promise<void> {
+  public async useAction(): Promise<void | string> {
     // Calculate the position directly in front of the player
     const dx = Math.cos(this.player.rotation);
     const dy = Math.sin(this.player.rotation);
@@ -271,28 +269,21 @@ class GridPuzzle3D {
         // Get the door mesh and open it by rotating
         const doorMesh = this.doors.get(targetKey)!;
 
+        await this.openDoorAsync(doorMesh);
         // Wait for door opening animation to complete
-        return new Promise((resolve) => {
-          this.openDoorAsync(doorMesh, () => {
-            // Remove the door from blocked tiles so player can pass through
-            this.doors.delete(targetKey);
-            this.blocked.delete(targetKey);
+        this.doors.delete(targetKey);
+        this.blocked.delete(targetKey);
+        return "Door opened!";
 
-            this.showBanner("Door opened!");
-            resolve();
-          });
-        });
       } else {
-        this.showBanner("You need a key to open this door!");
-        return Promise.resolve();
+        return ("You need a key to open this door!");
       }
     } else {
-      this.showBanner("There's nothing to use here.");
-      return Promise.resolve();
+      return "There's nothing to use here."
     }
   }
 
-  private openDoorAsync(doorMesh: AbstractMesh, onComplete: () => void): void {
+  private async openDoorAsync(doorMesh: AbstractMesh): Promise<void> {
     // Find the inner mesh (the actual door model) and rotate it
     const doorGroup = doorMesh as Mesh;
     const innerDoorMesh = doorGroup.getChildMeshes().find(mesh => mesh.name.endsWith('$'));
@@ -304,44 +295,40 @@ class GridPuzzle3D {
       const startTime = performance.now();
       const duration = 500; // 500ms animation
 
-      const observer = this.scene.onBeforeRenderObservable.add(() => {
-        const elapsed = performance.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
+      return new Promise((resolve) => {
+        const observer = this.scene.onBeforeRenderObservable.add(() => {
+          const elapsed = performance.now() - startTime;
+          const progress = Math.min(elapsed / duration, 1);
 
-        // Smooth easing
-        const easedProgress = 0.5 - 0.5 * Math.cos(Math.PI * progress);
+          // Smooth easing
+          const easedProgress = 0.5 - 0.5 * Math.cos(Math.PI * progress);
 
-        // Interpolate rotation
-        innerDoorMesh.rotation.y = startRotation + (targetRotation - startRotation) * easedProgress;
+          // Interpolate rotation
+          innerDoorMesh.rotation.y = startRotation + (targetRotation - startRotation) * easedProgress;
 
-        if (progress >= 1) {
-          this.scene.onBeforeRenderObservable.remove(observer);
-          onComplete();
-        }
+          if (progress >= 1) {
+            this.scene.onBeforeRenderObservable.remove(observer);
+            resolve();
+          }
+        })
       });
-    } else {
-      // If no door mesh found, complete immediately
-      onComplete();
     }
   }
 
 
-  private attemptMoveAsync(dx: number, dy: number, onComplete: () => void): void {
+  private async attemptMoveAsync(dx: number, dy: number) {
     const nx = this.player.x + dx;
     const ny = this.player.y + dy;
 
     if (!this.inBounds(nx, ny)) {
-      onComplete();
-      return;
+      return "You can't go there";
     }
 
     const targetKey = parts.keyOf(nx, ny);
 
     // Doors now block movement - they must be opened with T key first
     if (this.doors.has(targetKey)) {
-      this.showBanner("Press T to open the door!");
-      onComplete();
-      return;
+      return "Press T to open the door!";
     }
 
     // Handle box pushing
@@ -351,10 +338,8 @@ class GridPuzzle3D {
       const boxTargetKey = parts.keyOf(bx, by);
 
       if (!this.inBounds(bx, by) || this.isBlocked(bx, by)) {
-        onComplete();
-        return; // Can't push box
+        return "Can't push box";
       }
-
       // Remove lava if box is pushed into it
       const box = this.boxes.get(targetKey)!;
       if (this.lava.has(boxTargetKey)) {
@@ -379,15 +364,14 @@ class GridPuzzle3D {
 
     // Final check: if still blocked, can't move
     if (this.isBlocked(nx, ny)) {
-      onComplete();
-      return;
+      return "You can't go there";
     }
 
     // Move player with completion callback
-    this.movePlayerAsync(nx, ny, onComplete);
+    await this.movePlayerAsync(nx, ny);
   }
 
-  private movePlayerAsync(nx: number, ny: number, onComplete: () => void): void {
+  private async movePlayerAsync(nx: number, ny: number): Promise<void> {
     this.player.moving = true;
 
     // Store initial positions for camera following
@@ -397,56 +381,55 @@ class GridPuzzle3D {
     const targetPlayerPosition = this.cellToWorld(nx, ny, this.TILE * 0.5);
     const movementDelta = targetPlayerPosition.subtract(initialPlayerPosition);
 
-    this.tweenPlayerAndCamera(
+    await this.tweenPlayerAndCamera(
       targetPlayerPosition,
       this.MOVE_MS,
       initialCameraPosition,
       initialCameraTarget,
       movementDelta,
-      () => {
-        this.player.x = nx;
-        this.player.y = ny;
-        this.player.moving = false;
-        this.handlePlayerLanded();
-        onComplete();
-      }
     );
+    this.player.x = nx;
+    this.player.y = ny;
+    this.player.moving = false;
+    await this.handlePlayerLanded();
+
   }
 
-  private tweenPlayerAndCamera(
+  private async tweenPlayerAndCamera(
     targetPos: Vector3,
     durationMs: number,
     initialCameraPosition: Vector3,
     initialCameraTarget: Vector3,
     movementDelta: Vector3,
-    onComplete?: () => void
-  ): void {
+  ): Promise<void> {
     const startPos = this.player.mesh.position.clone();
     const startTime = performance.now();
 
-    const observer = this.scene.onBeforeRenderObservable.add(() => {
-      const elapsed = performance.now() - startTime;
-      const progress = Math.min(elapsed / durationMs, 1);
+    return new Promise((resolve) => {
+      const observer = this.scene.onBeforeRenderObservable.add(() => {
+        const elapsed = performance.now() - startTime;
+        const progress = Math.min(elapsed / durationMs, 1);
 
-      // Smooth easing
-      const easedProgress = 0.5 - 0.5 * Math.cos(Math.PI * progress);
+        // Smooth easing
+        const easedProgress = 0.5 - 0.5 * Math.cos(Math.PI * progress);
 
-      // Update player position
-      this.player.mesh.position = Vector3.Lerp(startPos, targetPos, easedProgress);
+        // Update player position
+        this.player.mesh.position = Vector3.Lerp(startPos, targetPos, easedProgress);
 
-      // Update camera position and target to follow
-      const cameraOffset = movementDelta.scale(easedProgress);
-      this.camera.position = initialCameraPosition.add(cameraOffset);
-      this.camera.setTarget(initialCameraTarget.add(cameraOffset));
+        // Update camera position and target to follow
+        const cameraOffset = movementDelta.scale(easedProgress);
+        this.camera.position = initialCameraPosition.add(cameraOffset);
+        this.camera.setTarget(initialCameraTarget.add(cameraOffset));
 
-      if (progress >= 1) {
-        this.scene.onBeforeRenderObservable.remove(observer);
-        if (onComplete) onComplete();
-      }
+        if (progress >= 1) {
+          this.scene.onBeforeRenderObservable.remove(observer);
+          resolve();
+        }
+      })
     });
   }
 
-  private handlePlayerLanded(): void {
+  private async handlePlayerLanded(): Promise<string | void> {
     const playerKey = parts.keyOf(this.player.x, this.player.y);
 
     // Key pickup
@@ -460,21 +443,17 @@ class GridPuzzle3D {
 
     // Lava check
     if (this.lava.has(playerKey)) {
-      this.showBanner("You fell in lava. Press R to respawn.");
       this.player.mesh.dispose();
-      return;
+      return "You fell in lava.";
     }
 
     // Exit check
     if (this.player.x === this.exitCell.x && this.player.y === this.exitCell.y) {
-      this.triggerWinAnimation();
-      return;
+      return this.triggerWinAnimation();
     }
-
-    this.showBanner("");
   }
 
-  private triggerWinAnimation(): void {
+  private async triggerWinAnimation(): Promise<string> {
     this.player.moving = true; // Prevent further movement during animation
 
     // Find the exit group to enhance its glow
@@ -490,9 +469,9 @@ class GridPuzzle3D {
     this.animatePlayerWin();
 
     // Show win message after a delay
-    setTimeout(() => {
-      this.showBanner("🎉 You win! Press R to play again. 🎉");
-    }, 1000);
+
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    return "🎉 You win! Good job. 🎉";
   }
 
   private enhanceExitGlow(exitGroup: AbstractMesh): void {
@@ -663,9 +642,6 @@ class GridPuzzle3D {
 
   }
 
-  private showBanner(message: string): void {
-    this.bannerElement.textContent = message;
-  }
 
   private start(): void {
     this.engine.runRenderLoop(() => this.scene.render());
