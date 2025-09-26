@@ -11,6 +11,7 @@ import {
 } from '@babylonjs/core';
 import '@babylonjs/loaders'; // This adds the loaders to the scene
 import * as parts from './parts';
+import { CONFIG } from './config';
 
 // Types
 interface Position {
@@ -476,7 +477,6 @@ class GridPuzzle3D {
 
   private enhanceExitGlow(exitGroup: AbstractMesh): void {
     const orbMesh = exitGroup.getChildMeshes().find(mesh => mesh.name.includes('exitOrb'));
-    const platformMesh = exitGroup.getChildMeshes().find(mesh => mesh.name.includes('exitPlatform'));
 
     if (orbMesh && orbMesh.material) {
       const orbMaterial = orbMesh.material as StandardMaterial;
@@ -654,8 +654,10 @@ class GridPuzzle3D {
 document.addEventListener('DOMContentLoaded', () => {
   const game = new GridPuzzle3D();
 
-  // Expose game controller to Python REPL
-  if ((window as any).setGameController) {
-    (window as any).setGameController(game);
-  }
+  // Expose game controller to Python REPL via UI Manager
+  setTimeout(() => {
+    if ((window as any).setGameController) {
+      (window as any).setGameController(game);
+    }
+  }, CONFIG.GAME_CONTROLLER_INIT_DELAY);
 });
