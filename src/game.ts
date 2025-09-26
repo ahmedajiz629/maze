@@ -745,7 +745,8 @@ class GridPuzzle3D {
   }
 
   private initInput(): void {
-    window.addEventListener("keydown", (e) => this.handleKeyDown(e));
+    // Remove keyboard input handling - now controlled by Python REPL
+    // window.addEventListener("keydown", (e) => this.handleKeyDown(e));
 
     // Animate keys (floating and rotating)
     this.scene.onBeforeRenderObservable.add(() => {
@@ -765,6 +766,24 @@ class GridPuzzle3D {
       }
     });
   }
+
+  // Public methods for Python REPL control
+  public moveForward(): void {
+    if (this.player.moving) return;
+    this.movePlayerForward();
+  }
+
+  public turnLeft(): void {
+    if (this.player.moving) return;
+    this.rotatePlayer(Math.PI / 2);
+  }
+
+  public turnRight(): void {
+    if (this.player.moving) return;
+    this.rotatePlayer(-Math.PI / 2);
+  }
+
+  // useAction is already defined below - we'll make it public
 
   private handleKeyDown(e: KeyboardEvent): void {
     if (this.player.moving) return;
@@ -826,7 +845,7 @@ class GridPuzzle3D {
     this.attemptMove(gridDx, gridDy);
   }
 
-  private useAction(): void {
+  public useAction(): void {
     // Calculate the position directly in front of the player
     const dx = Math.cos(this.player.rotation);
     const dy = Math.sin(this.player.rotation);
@@ -1254,5 +1273,10 @@ class GridPuzzle3D {
 
 // Initialize the game when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-  new GridPuzzle3D();
+  const game = new GridPuzzle3D();
+  
+  // Expose game controller to Python REPL
+  if ((window as any).setGameController) {
+    (window as any).setGameController(game);
+  }
 });

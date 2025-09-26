@@ -13,6 +13,8 @@
       color: #eee;
       font-family: system-ui;
       overflow: hidden;
+      display: flex;
+      flex: 1;
     }
     #hud {
       position: fixed;
@@ -25,6 +27,7 @@
       border-radius: 8px;
       border: 2px solid rgba(255, 255, 255, 0.2);
     }
+    
     
     .hud-title {
       font-size: 14px;
@@ -63,6 +66,7 @@
       font-weight: bold;
     }
     #banner {
+      display: none;
       position: fixed;
       left: 0;
       right: 0;
@@ -77,6 +81,60 @@
       border-radius: 6px;
       min-height: 20px;
     }
+    .container {
+      display: flex;
+      width: 100%;
+      height: 100%;
+    }
+    
+    .game-panel {
+      flex: 1;
+      position: relative;
+      height: 100%;
+    }
+    
+    .python-panel {
+      flex: 1;
+      background: #1e1e1e;
+      border-left: 2px solid #333;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    
+    .python-header {
+      background: #2d2d30;
+      padding: 12px;
+      border-bottom: 1px solid #444;
+      font-weight: bold;
+      font-size: 14px;
+      color: #fff;
+    }
+    
+    .python-console {
+      flex: 1;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 14px;
+      padding: 12px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    
+    .python-input {
+      background: #2d2d30;
+      border: none;
+      color: #d4d4d4;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 14px;
+      padding: 12px;
+      outline: none;
+      resize: none;
+      min-height: 40px;
+      border-top: 1px solid #444;
+    }
+    
     #c {
       display: block;
       width: 100%;
@@ -94,18 +152,168 @@
 </head>
 <body>
   <div class="loading" id="loading">Loading...</div>
-  <div id="hud">
-    <div class="hud-title">Items</div>
-    <div class="keys-container" id="keys-container">
-      <!-- Keys will be dynamically added here -->
+  
+  <div class="container">
+    <div class="game-panel">
+      <div id="hud">
+        <div class="hud-title">Items</div>
+        <div class="keys-container" id="keys-container">
+          <!-- Keys will be dynamically added here -->
+        </div>
+      </div>
+      <div id="banner"></div>
+      <canvas id="c"></canvas>
+    </div>
+    
+    <div class="python-panel">
+      <div class="python-header">Python REPL - Game Controller</div>
+      <div class="python-console" id="python-console">
+Python 3.11.0 (WebAssembly)
+>>> # Available commands:
+>>> # step() - Move forward
+>>> # left() - Turn left  
+>>> # right() - Turn right
+>>> # toggle() - Use/interact with items
+>>> 
+      </div>
+      <textarea id="python-input" class="python-input" placeholder="Enter Python commands here..." rows="3"></textarea>
     </div>
   </div>
-  <div id="banner"></div>
-  <canvas id="c"></canvas>
 
   <script type="module" src="/src/game.ts"></script>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
   
   <script>
+    let pyodide = null;
+    let gameController = null;
+    
+    // Initialize Pyodide
+    async function initPyodide() {
+      try {
+        pyodide = await loadPyodide();
+        console.log("Pyodide loaded successfully");
+        
+        // Make game controller available to Python
+        pyodide.globals.set("gameController", gameController);
+        
+        // Define Python functions that call game methods
+        await pyodide.runPython(`
+def step():
+    """Move player forward"""
+    if gameController:
+        gameController.moveForward()
+    else:
+        print("Game not ready yet")
+
+def left():
+    """Turn player left"""
+    if gameController:
+        gameController.turnLeft()
+    else:
+        print("Game not ready yet")
+
+def right():
+    """Turn player right"""
+    if gameController:
+        gameController.turnRight()
+    else:
+        print("Game not ready yet")
+
+def toggle():
+    """Use/interact with items"""
+    if gameController:
+        gameController.useAction()
+    else:
+        print("Game not ready yet")
+
+print("Game controller functions ready!")
+print("Available commands: step(), left(), right(), toggle()")
+        `);
+        
+        updateConsole("Pyodide initialized! Game controller ready.\n");
+      } catch (error) {
+        console.error("Failed to load Pyodide:", error);
+        updateConsole("Failed to load Pyodide: " + error.message + "\n");
+      }
+    }
+    
+    // Update console output
+    function updateConsole(text) {
+      const console = document.getElementById('python-console');
+      console.textContent += text;
+      console.scrollTop = console.scrollHeight;
+    }
+    
+    // Handle Python input
+    function handlePythonInput() {
+      const input = document.getElementById('python-input');
+      const code = input.value.trim();
+      
+      if (!code) return;
+      
+      updateConsole(` ${code}\n`);
+      
+      if (pyodide) {
+        try {
+          // Capture stdout
+          pyodide.runPython(`
+import sys
+from io import StringIO
+old_stdout = sys.stdout
+sys.stdout = StringIO()
+          `);
+          
+          // Run the user code
+          const result = pyodide.runPython(code);
+          
+          // Get stdout output
+          const output = pyodide.runPython(`
+output = sys.stdout.getvalue()
+sys.stdout = old_stdout
+output
+          `);
+          
+          if (output) {
+            updateConsole(output);
+          }
+          
+          if (result !== undefined && result !== null) {
+            updateConsole(String(result) + '\n');
+          }
+        } catch (error) {
+          updateConsole(`Error: ${error.message}\n`);
+        }
+      } else {
+        updateConsole("Pyodide not loaded yet. Please wait...\n");
+      }
+      
+      input.value = '';
+      updateConsole('>>> ');
+    }
+    
+    // Setup input handling
+    document.addEventListener('DOMContentLoaded', () => {
+      const input = document.getElementById('python-input');
+      
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          handlePythonInput();
+        }
+      });
+      
+      // Initialize Pyodide
+      initPyodide();
+    });
+    
+    // Make gameController available globally so game.ts can set it
+    window.setGameController = function(controller) {
+      gameController = controller;
+      if (pyodide) {
+        pyodide.globals.set("gameController", controller);
+      }
+    };
+    
     // Hide loading screen once game is initialized
     window.addEventListener('load', () => {
       setTimeout(() => {
