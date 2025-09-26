@@ -1,0 +1,1 @@
+export const keyOf = (i: number, j: number) => `${i},${j}`
