@@ -168,12 +168,13 @@
     <div class="python-panel">
       <div class="python-header">Python REPL - Game Controller</div>
       <div class="python-console" id="python-console">
-Python 3.11.0 (WebAssembly)
->>> # Available commands:
->>> # step() - Move forward
->>> # left() - Turn left  
->>> # right() - Turn right
->>> # toggle() - Use/interact with items
+Python 3.11.0 (WebAssembly) - Loading...
+>>> # Available commands (when ready):
+>>> # await step() - Move forward
+>>> # await left() - Turn left  
+>>> # await right() - Turn right
+>>> # await toggle() - Use/interact with items
+>>> # sleep(seconds) - Wait (doesn't freeze UI!)
 >>> 
       </div>
       <textarea id="python-input" class="python-input" placeholder="Enter Python commands here..." rows="3"></textarea>
@@ -181,59 +182,82 @@ Python 3.11.0 (WebAssembly)
   </div>
 
   <script type="module" src="/src/game.ts"></script>
-  <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
   
   <script>
-    let pyodide = null;
+    let pythonWorker = null;
     let gameController = null;
     
-    // Initialize Pyodide
-    async function initPyodide() {
+    // Initialize Python Web Worker
+    function initPythonWorker() {
       try {
-        pyodide = await loadPyodide();
-        console.log("Pyodide loaded successfully");
+        pythonWorker = new Worker('/python-worker.js');
         
-        // Make game controller available to Python
-        pyodide.globals.set("gameController", gameController);
+        pythonWorker.onmessage = async function(e) {
+          const { type, message, data, messageId, method, args } = e.data;
+          
+          switch (type) {
+            case 'ready':
+              updateConsole(message);
+              // Send game controller ready signal if available
+              if (gameController) {
+                pythonWorker.postMessage({ type: 'setGameController' });
+              }
+              break;
+              
+            case 'result':
+              if (data.output) {
+                updateConsole(data.output);
+              }
+              if (data.result) {
+                updateConsole(data.result + '\n');
+              }
+              updateConsole('>>> ');
+              break;
+              
+            case 'error':
+              updateConsole(message);
+              updateConsole('>>> ');
+              break;
+              
+            case 'callGameMethod':
+              // Handle game method calls from worker
+              if (gameController && gameController[method]) {
+                try {
+                  const result = await gameController[method](...args);
+                  pythonWorker.postMessage({
+                    type: 'gameMethodResult',
+                    messageId,
+                    result
+                  });
+                } catch (error) {
+                  pythonWorker.postMessage({
+                    type: 'gameMethodResult',
+                    messageId,
+                    error: error.message
+                  });
+                }
+              } else {
+                pythonWorker.postMessage({
+                  type: 'gameMethodResult',
+                  messageId,
+                  error: 'Game controller not ready'
+                });
+              }
+              break;
+          }
+        };
         
-        // Define Python functions that call game methods
-        await pyodide.runPython(`
-def step():
-    """Move player forward"""
-    if gameController:
-        gameController.moveForward()
-    else:
-        print("Game not ready yet")
-
-def left():
-    """Turn player left"""
-    if gameController:
-        gameController.turnLeft()
-    else:
-        print("Game not ready yet")
-
-def right():
-    """Turn player right"""
-    if gameController:
-        gameController.turnRight()
-    else:
-        print("Game not ready yet")
-
-def toggle():
-    """Use/interact with items"""
-    if gameController:
-        gameController.useAction()
-    else:
-        print("Game not ready yet")
-
-print("Game controller functions ready!")
-print("Available commands: step(), left(), right(), toggle()")
-        `);
+        pythonWorker.onerror = function(error) {
+          console.error("Python Worker error:", error);
+          updateConsole("Python Worker error: " + error.message + "\n");
+        };
         
-        updateConsole("Pyodide initialized! Game controller ready.\n");
+        // Initialize Pyodide in the worker
+        pythonWorker.postMessage({ type: 'init' });
+        
       } catch (error) {
-        console.error("Failed to load Pyodide:", error);
-        updateConsole("Failed to load Pyodide: " + error.message + "\n");
+        console.error("Failed to create Python Worker:", error);
+        updateConsole("Failed to create Python Worker: " + error.message + "\n");
       }
     }
     
@@ -251,44 +275,17 @@ print("Available commands: step(), left(), right(), toggle()")
       
       if (!code) return;
       
-      updateConsole(` ${code}\n`);
+      updateConsole(`>>> ${code}\n`);
       
-      if (pyodide) {
-        try {
-          // Capture stdout
-          pyodide.runPython(`
-import sys
-from io import StringIO
-old_stdout = sys.stdout
-sys.stdout = StringIO()
-          `);
-          
-          // Run the user code
-          const result = pyodide.runPython(code);
-          
-          // Get stdout output
-          const output = pyodide.runPython(`
-output = sys.stdout.getvalue()
-sys.stdout = old_stdout
-output
-          `);
-          
-          if (output) {
-            updateConsole(output);
-          }
-          
-          if (result !== undefined && result !== null) {
-            updateConsole(String(result) + '\n');
-          }
-        } catch (error) {
-          updateConsole(`Error: ${error.message}\n`);
-        }
+      if (pythonWorker) {
+        // Send code to worker for execution
+        pythonWorker.postMessage({ type: 'runCode', data: { code } });
       } else {
-        updateConsole("Pyodide not loaded yet. Please wait...\n");
+        updateConsole("Python Worker not ready yet. Please wait...\n");
+        updateConsole('>>> ');
       }
       
       input.value = '';
-      updateConsole('>>> ');
     }
     
     // Setup input handling
@@ -302,15 +299,15 @@ output
         }
       });
       
-      // Initialize Pyodide
-      initPyodide();
+      // Initialize Python Worker
+      initPythonWorker();
     });
     
     // Make gameController available globally so game.ts can set it
     window.setGameController = function(controller) {
       gameController = controller;
-      if (pyodide) {
-        pyodide.globals.set("gameController", controller);
+      if (pythonWorker) {
+        pythonWorker.postMessage({ type: 'setGameController' });
       }
     };
     
