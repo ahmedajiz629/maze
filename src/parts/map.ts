@@ -1,6 +1,6 @@
 import { AbstractMesh, Mesh, Scene } from "@babylonjs/core";
 import { cellToWorld } from "./cellToWorld";
-import { createBox, createDoor, createKey, createLava, createWall } from "./units";
+import { createAutoDoor, createBox, createDoor, createKey, createLava, createWall } from "./units";
 import { createExit } from "./units/exit";
 
 export const initMap = async (scene: Scene, config: { MAP: string[], WALL_H: number, TILE: number },
@@ -9,6 +9,7 @@ export const initMap = async (scene: Scene, config: { MAP: string[], WALL_H: num
     blocked: Set<string>,
     boxes: Map<string, AbstractMesh>,
     doors: Map<string, AbstractMesh>,
+    autoDoors: Map<string, AbstractMesh>,
     keys: Map<string, AbstractMesh>,
     lava: Map<string, AbstractMesh>
   }) => {
@@ -37,6 +38,12 @@ export const initMap = async (scene: Scene, config: { MAP: string[], WALL_H: num
           break;
         case "d":
           promises.push(createDoor(scene, config, i, j, p, state, true));
+          break;
+        case "A":
+          promises.push(createAutoDoor(scene, config, i, j, p, state, false));
+          break;
+        case "a":
+          promises.push(createAutoDoor(scene, config, i, j, p, state, true));
           break;
         case "K":
           promises.push(createKey(scene, config, i, j, p, state));

@@ -31,9 +31,9 @@ interface Player {
 
 class GridPuzzle3D {
   private readonly MAP = [
-    "...#################",
-    ".S.KB.#...........E#",
-    "#~##.#.#####.#######",
+    "..A#################",
+    ".S.KB.#........a..E#",
+    "#~##.#.#####A#######",
     "#~...#.....#.......#",
     "###.###.#.#.###.#..#",
     "#..B....#.#...#.#..#",
@@ -73,6 +73,7 @@ class GridPuzzle3D {
   // Collections
   private blocked = new Set<string>();
   private doors = new Map<string, AbstractMesh>();
+  private autoDoors = new Map<string, AbstractMesh>();
   private boxes = new Map<string, AbstractMesh>();
   private keys = new Map<string, AbstractMesh>();
   private lava = new Map<string, AbstractMesh>();
@@ -114,6 +115,7 @@ class GridPuzzle3D {
       blocked: this.blocked,
       boxes: this.boxes,
       doors: this.doors,
+      autoDoors: this.autoDoors,
       keys: this.keys,
       lava: this.lava
     });
