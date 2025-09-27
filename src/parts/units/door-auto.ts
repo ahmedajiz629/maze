@@ -1,4 +1,4 @@
-import { AbstractMesh, Color3, ImportMeshAsync, Mesh, PBRMaterial, SpotLight, Scene, StandardMaterial, Vector3 } from "@babylonjs/core";
+import { AbstractMesh, Color3, ImportMeshAsync, Mesh, PointLight, Scene, Vector3 } from "@babylonjs/core";
 import { keyOf } from "../keyOf";
 
 
@@ -37,12 +37,12 @@ export const createAutoDoor = async function (
 ): Promise<void> {
   const doorGroup = await makeDoor(scene, { TILE: config.TILE, WALL_H: config.WALL_H });
   doorGroup.position = p;
-
+  
   // Apply rotation for "d" doors
   if (rotated) {
     doorGroup.rotation.y = Math.PI / 2; // Rotate 90 degrees
   }
-
+  
   state.autoDoors.set(keyOf(i, j), doorGroup);
   state.blocked.add(keyOf(i, j));
 }

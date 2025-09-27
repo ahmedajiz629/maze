@@ -31,8 +31,8 @@ interface Player {
 
 class GridPuzzle3D {
   private readonly MAP = [
-    "..A#################",
-    ".S.KB.#........a..E#",
+    "...#################",
+    ".StyB.#........a..E#",
     "#~##.#.#####A#######",
     "#~...#.....#.......#",
     "###.###.#.#.###.#..#",
@@ -40,7 +40,7 @@ class GridPuzzle3D {
     "#D#~#####.#.#.#.#..#",
     "#...d.....#.#.#....#",
     "#####.#####.#.####.#",
-    "#.....#.....#......#",
+    "#..T..#.....#......#",
     "#.###.#.###.#####..#",
     "#.#...#...#.....#..#",
     "#.#.#####.#####.#..#",
@@ -49,7 +49,7 @@ class GridPuzzle3D {
     "#.....~...#.#.#....#",
     "###.###.###.#.######",
     "#.....#.....#......#",
-    "#.d...#.K...#..B...#",
+    "#.d...#.K.Y.#..B...#",
     "####################",
   ];
 
@@ -77,6 +77,7 @@ class GridPuzzle3D {
   private boxes = new Map<string, AbstractMesh>();
   private keys = new Map<string, AbstractMesh>();
   private lava = new Map<string, AbstractMesh>();
+  private buttons = new Map<string, { mesh: AbstractMesh, direction: number, toggled: boolean }>();
 
   // UI elements
   private hudElement: HTMLElement;
@@ -117,7 +118,8 @@ class GridPuzzle3D {
       doors: this.doors,
       autoDoors: this.autoDoors,
       keys: this.keys,
-      lava: this.lava
+      lava: this.lava,
+      buttons: this.buttons
     });
     Object.assign(this, cells); // Get spawn and exit cells
 
@@ -251,7 +253,35 @@ class GridPuzzle3D {
   }
 
   public async useAction(): Promise<void | string> {
-    // Calculate the position directly in front of the player
+    // First check if there's a button on current position
+    const currentKey = parts.keyOf(this.player.x, this.player.y);
+    if (this.buttons.has(currentKey)) {
+      const button = this.buttons.get(currentKey)!;
+      
+      // Check if player is facing the correct direction
+      const playerDirection = (-this.player.rotation + 2 * Math.PI) % (2 * Math.PI);
+      const buttonDirection = (button.direction + 5 * Math.PI/2) % (2 * Math.PI);
+      const directionThreshold = 0.1; // Small tolerance for direction matching
+      
+      const directionMatch = Math.abs(playerDirection - buttonDirection) < directionThreshold ||
+                            Math.abs(playerDirection - buttonDirection) > (2 * Math.PI - directionThreshold);
+      
+      if (directionMatch && !button.toggled) {
+        // Toggle the button
+        button.toggled = true;
+        
+        // Animate button press - find mesh with $ suffix and move it down
+        await this.animateButtonPress(button.mesh);
+        
+        return "Button activated!";
+      } else if (button.toggled) {
+        return "Button already activated.";
+      } else {
+        return "You need to face the button to activate it.";
+      }
+    }
+
+    // Calculate the position directly in front of the player for door interaction
     const dx = Math.cos(this.player.rotation);
     const dy = Math.sin(this.player.rotation);
     const gridDx = Math.round(dx);
@@ -306,6 +336,38 @@ class GridPuzzle3D {
 
           // Interpolate rotation
           innerDoorMesh.rotation.y = startRotation + (targetRotation - startRotation) * easedProgress;
+
+          if (progress >= 1) {
+            this.scene.onBeforeRenderObservable.remove(observer);
+            resolve();
+          }
+        })
+      });
+    }
+  }
+
+  private async animateButtonPress(buttonMesh: AbstractMesh): Promise<void> {
+    // Find the inner mesh (the actual button model) with $ suffix
+    const buttonGroup = buttonMesh as Mesh;
+    const innerButtonMesh = buttonGroup.getChildMeshes().find(mesh => mesh.name.endsWith('$'));
+
+    if (innerButtonMesh) {
+      // Animate the button pressing down by moving it in Z axis
+      const startZ = innerButtonMesh.position.z;
+      const targetZ = startZ - 0.4; // Move down by 0.2 units
+      const startTime = performance.now();
+      const duration = 200; // 200ms animation
+
+      return new Promise((resolve) => {
+        const observer = this.scene.onBeforeRenderObservable.add(() => {
+          const elapsed = performance.now() - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+
+          // Smooth easing
+          const easedProgress = 0.5 - 0.5 * Math.cos(Math.PI * progress);
+
+          // Interpolate Z position
+          innerButtonMesh.position.z = startZ + (targetZ - startZ) * easedProgress;
 
           if (progress >= 1) {
             this.scene.onBeforeRenderObservable.remove(observer);

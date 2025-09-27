@@ -1,6 +1,6 @@
 import { AbstractMesh, Mesh, Scene } from "@babylonjs/core";
 import { cellToWorld } from "./cellToWorld";
-import { createAutoDoor, createBox, createDoor, createKey, createLava, createWall } from "./units";
+import { createAutoDoor, createBox, createDoor, createKey, createLava, createWall, createButton } from "./units";
 import { createExit } from "./units/exit";
 
 export const initMap = async (scene: Scene, config: { MAP: string[], WALL_H: number, TILE: number },
@@ -11,7 +11,8 @@ export const initMap = async (scene: Scene, config: { MAP: string[], WALL_H: num
     doors: Map<string, AbstractMesh>,
     autoDoors: Map<string, AbstractMesh>,
     keys: Map<string, AbstractMesh>,
-    lava: Map<string, AbstractMesh>
+    lava: Map<string, AbstractMesh>,
+    buttons: Map<string, { mesh: AbstractMesh, direction: number, toggled: boolean }>
   }) => {
   const W = config.MAP[0].length;
   const H = config.MAP.length;
@@ -47,6 +48,18 @@ export const initMap = async (scene: Scene, config: { MAP: string[], WALL_H: num
           break;
         case "K":
           promises.push(createKey(scene, config, i, j, p, state));
+          break;
+        case "T": // Button facing right
+          promises.push(createButton(scene, config, i, j, p, state, 'T'));
+          break;
+        case "t": // Button facing left
+          promises.push(createButton(scene, config, i, j, p, state, 't'));
+          break;
+        case "Y": // Button facing up  
+          promises.push(createButton(scene, config, i, j, p, state, 'Y'));
+          break;
+        case "y": // Button facing down
+          promises.push(createButton(scene, config, i, j, p, state, 'y'));
           break;
         case "~":
           createLava(scene, config, i, j, p, state);
