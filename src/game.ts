@@ -181,7 +181,7 @@ class GridPuzzle3D {
   }
 
   // Public methods for Python REPL control
-  public async moveForward(): Promise<void> {
+  public async moveForward() {
     if (this.player.moving) return;
     return this.movePlayerForwardAsync();
   }
@@ -247,7 +247,7 @@ class GridPuzzle3D {
     const gridDx = Math.round(dx);
     const gridDy = Math.round(dy);
 
-    await this.attemptMoveAsync(gridDx, gridDy);
+    return await this.attemptMoveAsync(gridDx, gridDy);
   }
 
   public async useAction(): Promise<void | string> {

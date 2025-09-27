@@ -32,7 +32,7 @@ export class PythonREPL {
       this.pythonWorker = new Worker(CONFIG.PYTHON_WORKER_URL);
       
       this.pythonWorker.onmessage = async (e) => {
-        const { type, message, data, messageId, method, args } = e.data;
+        const { type, message, data } = e.data;
         
         switch (type) {
           case 'ready':
@@ -94,16 +94,16 @@ export class PythonREPL {
 
     switch (method) {
       case 1: // step
-        methodResult = await this.gameController?.moveForward?.();
+        methodResult = await this.gameController?.moveForward();
         break;
       case 2: // left
-        methodResult = await this.gameController?.turnLeft?.();
+        methodResult = await this.gameController?.turnLeft();
         break;
       case 3: // right
-        methodResult = await this.gameController?.turnRight?.();
+        methodResult = await this.gameController?.turnRight();
         break;
       case 4: // toggle
-        methodResult = await this.gameController?.useAction?.();
+        methodResult = await this.gameController?.useAction();
         break;
     }
 
