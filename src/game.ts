@@ -30,34 +30,11 @@ interface Player {
 }
 
 class GridPuzzle3D {
-  private readonly MAP = [
-    "...#################",
-    ".StyB.#........a..E#",
-    "#0##.#.#####A#######",
-    "#123.#.....#.......#",
-    "###4###.#.#.###.#..#",
-    "#..B....#.#...#.#..#",
-    "#D#~#####.#.#.#.#..#",
-    "#...d.....#.#.#....#",
-    "#####.#####.#.####.#",
-    "#..T..#.....#......#",
-    "#.###.#.###.#####..#",
-    "#.#...#...#.....#..#",
-    "#.#.#####.#####.#..#",
-    "#.#......9#...#.#..#",
-    "#.#######8#.#.#.#..#",
-    "#01234~567#.#.#....#",
-    "###.###.###.#.######",
-    "#.....#.....#......#",
-    "#.d...#.K.Y.#..B...#",
-    "####################",
-  ];
 
   private readonly TILE = 2; // world units per grid cell
   private readonly WALL_H = 2; // wall height
   private readonly MOVE_MS = 140; // move tween duration
   private readonly PUSH_MS = 120; // box push tween duration
-  private readonly TIME_MS = 10000; // button effect duration in ms
 
   private engine!: Engine;
   private scene!: Scene;
@@ -88,7 +65,10 @@ class GridPuzzle3D {
   // Mesh templates
   private wallUnit!: Mesh;
 
-  constructor() {
+  constructor(
+    protected readonly MAP: string[],
+    protected readonly TIME_MS = 10000, // button effect duration 
+  ) {
     this.W = this.MAP[0].length;
     this.H = this.MAP.length;
     this.canvas = document.getElementById("c") as HTMLCanvasElement;
@@ -497,22 +477,32 @@ class GridPuzzle3D {
     for (let i = 0; i < 10; i++) {
       setTimeout(() => {
         // During interval i, lava blocks i and (i+1) become passable
-        this.updateTimedLavaPassability(i, true);
+        this.updateTimedLavaPassability(i);
       }, i * intervalDuration);
     }
   }
 
-  private updateTimedLavaPassability(currentInterval: number, isPassable: boolean): void {
+  private updateTimedLavaPassability(currentInterval: number): void {
     for (const [key, lavaData] of this.lava.entries()) {
       if (lavaData.interval === null) continue; // Skip non-timed lava
       // Lava block becomes passable during its interval and the next one
       if (Math.abs(lavaData.interval - currentInterval) <= 1) {
-        lavaData.isPassable = isPassable == (lavaData.interval >= currentInterval);
+        const wasPassable = lavaData.isPassable;
+        lavaData.isPassable = (lavaData.interval >= currentInterval);
 
         // Simply hide/show the lava mesh
         lavaData.mesh.setEnabled(!lavaData.isPassable); // Hide when passable, show when not passable
 
-        // No blocking - player can walk through when disabled, dies when enabled
+        // Check if player is standing on this lava when it becomes deadly
+        if (wasPassable && !lavaData.isPassable) {
+          const playerKey = parts.keyOf(this.player.x, this.player.y);
+          if (key === playerKey) {
+            // Player is standing on lava that just became deadly
+            this.player.mesh.dispose();
+            this.bannerElement.textContent = "You fell in lava.";
+            this.bannerElement.style.display = 'block';
+          }
+        }
       }
     }
   }
@@ -541,7 +531,7 @@ class GridPuzzle3D {
 
     // Doors now block movement - they must be opened with T key first
     if (this.doors.has(targetKey)) {
-      return "Press T to open the door!";
+      return "Door closed, Run toggle() to open the door!";
     }
 
     // Handle box pushing
@@ -572,7 +562,10 @@ class GridPuzzle3D {
             this.tweenPosition(
               box,
               this.cellToWorld(bx, by, -this.TILE / 2 + .1), // Fall below ground level
-              this.PUSH_MS / 2
+              this.PUSH_MS / 2,
+              () => {
+                box.dispose();
+              }
             );
           }
         );
@@ -878,16 +871,4 @@ class GridPuzzle3D {
   }
 }
 
-// Initialize the game when the DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-  const game = new GridPuzzle3D();
-
-  // Expose game controller to Python REPL via UI Manager
-  setTimeout(() => {
-    if ((window as any).setGameController) {
-      (window as any).setGameController(game);
-    }
-  }, CONFIG.GAME_CONTROLLER_INIT_DELAY);
-});
-
-export type { GridPuzzle3D };
+export { GridPuzzle3D };
