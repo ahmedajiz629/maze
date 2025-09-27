@@ -45,8 +45,7 @@ export class PythonREPL {
 
         switch (type) {
           case 'ready':
-            this.clearConsole();
-            this.updateConsole(message);
+            this.updateConsole('\n' + message);
             this.isReady = true;
             this.loadingElement.style.display = 'none';
             this.showPrompt();
