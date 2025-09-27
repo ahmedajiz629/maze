@@ -86,7 +86,7 @@ export class PythonREPL {
       // Initialize Pyodide in the worker
       this.pythonWorker.postMessage({
         type: 'init', sharedBuffer: this.sharedBuffer,
-        predefined: Object.entries(localStorage).flatMap(([k, v]) => k.startsWith('py:') ? [v] : [])
+        predefined: Object.fromEntries(Object.entries(localStorage).flatMap(([k, v]) => k.startsWith('py:') ? [[k.slice(3), v]] : []))
       });
 
     } catch (error) {

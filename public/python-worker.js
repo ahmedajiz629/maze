@@ -90,7 +90,7 @@ def sleep(seconds):
     """Sleep function that works in web worker"""
     import time
     time.sleep(seconds)
-${predefined.join('\n')}
+${Object.entries(predefined).map(([k, v]) => `${v}\n${k}.code = ${JSON.stringify(v)}`).join('\n')}
 level('$')
     `);
 
@@ -147,6 +147,10 @@ sys.stdout = StringIO()
         result = await p
         const match = /def\s+(\w+)\s*\(.*\):/.exec(code);
         pyodide.globals.set("_", result);
+        if(match) {
+            const k = match[1];
+            pyodide.runPython(`${k}.code = ${JSON.stringify(code)}`)
+        }
 
         // Get stdout output
         const output = pyodide.runPython(`
