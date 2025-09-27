@@ -353,10 +353,89 @@ class GridPuzzle3D {
 
     if (innerButtonMesh) {
       // Animate the button pressing down by moving it in Z axis
-      const startZ = innerButtonMesh.position.z;
-      const targetZ = startZ - 0.4; // Move down by 0.2 units
+      const startX = innerButtonMesh.rotation.x;
+      const targetX = Math.PI / 3;
       const startTime = performance.now();
       const duration = 200; // 200ms animation
+
+      // Press button down
+      await new Promise<void>((resolve) => {
+        const observer = this.scene.onBeforeRenderObservable.add(() => {
+          const elapsed = performance.now() - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+
+          // Smooth easing
+          const easedProgress = 0.5 - 0.5 * Math.cos(Math.PI * progress);
+
+          // Interpolate X rotation
+          innerButtonMesh.rotation.x = startX + (targetX - startX) * easedProgress;
+
+          if (progress >= 1) {
+            this.scene.onBeforeRenderObservable.remove(observer);
+            resolve();
+          }
+        })
+      });
+
+      // Open all auto doors
+      await this.openAllAutoDoors();
+
+      // Wait 5 seconds, then close doors and reset button
+      setTimeout(async () => {
+        // Close all auto doors
+        await this.closeAllAutoDoors();
+        
+        // Reset button position
+        await this.resetButtonPosition(innerButtonMesh, startX);
+        
+        // Reset button toggle state
+        const currentKey = parts.keyOf(this.player.x, this.player.y);
+        if (this.buttons.has(currentKey)) {
+          this.buttons.get(currentKey)!.toggled = false;
+        }
+      }, 5000);
+    }
+  }
+
+  private async openAllAutoDoors(): Promise<void> {
+    const openPromises: Promise<void>[] = [];
+    
+    for (const [key, doorMesh] of this.autoDoors.entries()) {
+      // Remove from blocked set to allow passage
+      this.blocked.delete(key);
+      
+      // Animate door opening
+      openPromises.push(this.openDoorAsync(doorMesh));
+    }
+    
+    await Promise.all(openPromises);
+  }
+
+  private async closeAllAutoDoors(): Promise<void> {
+    const closePromises: Promise<void>[] = [];
+    
+    for (const [key, doorMesh] of this.autoDoors.entries()) {
+      // Add back to blocked set
+      this.blocked.add(key);
+      
+      // Animate door closing
+      closePromises.push(this.closeDoorAsync(doorMesh));
+    }
+    
+    await Promise.all(closePromises);
+  }
+
+  private async closeDoorAsync(doorMesh: AbstractMesh): Promise<void> {
+    // Find the inner mesh (the actual door model) and rotate it back
+    const doorGroup = doorMesh as Mesh;
+    const innerDoorMesh = doorGroup.getChildMeshes().find(mesh => mesh.name.endsWith('$'));
+
+    if (innerDoorMesh) {
+      // Animate the door closing by rotating it back
+      const startRotation = innerDoorMesh.rotation.y;
+      const targetRotation = startRotation + Math.PI / 2; // Rotate back to closed position
+      const startTime = performance.now();
+      const duration = 500; // 500ms animation
 
       return new Promise((resolve) => {
         const observer = this.scene.onBeforeRenderObservable.add(() => {
@@ -366,8 +445,8 @@ class GridPuzzle3D {
           // Smooth easing
           const easedProgress = 0.5 - 0.5 * Math.cos(Math.PI * progress);
 
-          // Interpolate Z position
-          innerButtonMesh.position.z = startZ + (targetZ - startZ) * easedProgress;
+          // Interpolate rotation
+          innerDoorMesh.rotation.y = startRotation + (targetRotation - startRotation) * easedProgress;
 
           if (progress >= 1) {
             this.scene.onBeforeRenderObservable.remove(observer);
@@ -376,6 +455,32 @@ class GridPuzzle3D {
         })
       });
     }
+  }
+
+  private async resetButtonPosition(innerButtonMesh: AbstractMesh, originalZ: number): Promise<void> {
+    // Animate button returning to original position
+    const startX = innerButtonMesh.rotation.x;
+    const targetX = originalZ;
+    const startTime = performance.now();
+    const duration = 200; // 200ms animation
+
+    return new Promise((resolve) => {
+      const observer = this.scene.onBeforeRenderObservable.add(() => {
+        const elapsed = performance.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        // Smooth easing
+        const easedProgress = 0.5 - 0.5 * Math.cos(Math.PI * progress);
+
+        // Interpolate X rotation back to original
+        innerButtonMesh.rotation.x = startX + (targetX - startX) * easedProgress;
+
+        if (progress >= 1) {
+          this.scene.onBeforeRenderObservable.remove(observer);
+          resolve();
+        }
+      })
+    });
   }
 
 

@@ -12,12 +12,14 @@ const makeButton = async (scene: Scene, config: { TILE: number }) => {
         if (mesh.name === "__root__") {
             mesh.parent = buttonGroup_;
             // Scale the button to fit the tile size
-            const scale = 5; // Adjust as needed
+            const scale = 3; 
             mesh.scaling = new Vector3(scale, scale, scale);
+            mesh.position = new Vector3(0, -.75, 1.3); // Center the button
         }
     });
 
-    buttonGroup_.position = new Vector3(0, -.5, .2); // Center the button
+    buttonGroup_.position = new Vector3(0, 1, -1.2); // Center the button
+    buttonGroup_.rotation.x = -1 * Math.PI / 3;
     const buttonGroup = new Mesh(`button`, scene);
     buttonGroup_.parent = buttonGroup;
     return buttonGroup;
