@@ -341,26 +341,39 @@ class GridPuzzle3D {
       if (!this.inBounds(bx, by) || this.isBlocked(bx, by)) {
         return "Can't push box";
       }
-      // Remove lava if box is pushed into it
+      
       const box = this.boxes.get(targetKey)!;
+      this.boxes.delete(targetKey);
+      this.blocked.delete(targetKey);
+
       if (this.lava.has(boxTargetKey)) {
-        this.lava.get(boxTargetKey)!.dispose();
+        // Box is being pushed into lava - animate it falling and then remove both
+        const lava = this.lava.get(boxTargetKey)!
         this.lava.delete(boxTargetKey);
-        this.boxes.delete(targetKey);
-        this.blocked.delete(targetKey);
-        box.dispose();
+        this.tweenPosition(
+          box,
+          this.cellToWorld(bx, by, this.TILE * 0.49), // Move to lava position first
+          this.PUSH_MS,
+          () => {
+            // After box reaches lava, animate it falling down
+                lava.dispose();
+            this.tweenPosition(
+              box,
+              this.cellToWorld(bx, by, -this.TILE / 2 + .1), // Fall below ground level
+              this.PUSH_MS * 2, // Slower fall animation
+            );
+          }
+        );
       } else {
-        this.boxes.delete(targetKey);
-        this.blocked.delete(targetKey);
+        // Normal box push to empty space
         this.boxes.set(boxTargetKey, box);
         this.blocked.add(boxTargetKey);
+        this.tweenPosition(
+          box,
+          this.cellToWorld(bx, by, this.TILE * 0.49),
+          this.PUSH_MS
+        );
       }
-
-      this.tweenPosition(
-        box,
-        this.cellToWorld(bx, by, this.TILE * 0.49),
-        this.PUSH_MS
-      );
     }
 
     // Final check: if still blocked, can't move
