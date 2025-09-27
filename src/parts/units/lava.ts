@@ -6,7 +6,7 @@ export const makeLava = (scene: Scene, config: { TILE: number }) => {
   // Create a simple plane for the lava
   const lavaPlane = MeshBuilder.CreatePlane(
     `lava`,
-    { width: config.TILE * 0.95, height: config.TILE * 0.95 },
+    { width: config.TILE, height: config.TILE },
     scene
   );
 
@@ -49,7 +49,7 @@ export const createLava = (
 ): void => {
   // Use the existing makeLava function to create the lava mesh
   const lavaGroup = makeLava(scene, config);
-  lavaGroup.position = p.add(new Vector3(0, 0.1, 0));
+  lavaGroup.position = p.add(new Vector3(0, 0.01, 0));
   
   // Store in timed lava collection
   state.lava.set(keyOf(i, j), {

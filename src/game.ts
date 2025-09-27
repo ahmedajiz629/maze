@@ -24,6 +24,7 @@ interface Player {
   y: number;
   keys: number;
   mesh: AbstractMesh;
+  won: Date | null
   moving: boolean;
   rotation: number; // Player's facing direction in radians
   animationGroups?: AnimationGroup[]; // Store animations if available
@@ -84,10 +85,13 @@ class GridPuzzle3D {
 
     // Initialize map and load player asynchronously  
     this.initGeometry();
-    this.initializeGameAsync();
+  }
+  
+  public dispose() {
+    this.scene.dispose()
   }
 
-  private async initializeGameAsync(): Promise<void> {
+  public async initializeGameAsync(): Promise<void> {
     // Initialize geometry first (this loads the box model)
 
     // Initialize the map (this will load all keys)
@@ -115,6 +119,7 @@ class GridPuzzle3D {
 
   private async loadPlayer(): Promise<void> {
     this.player = {
+      won: null,
       x: this.spawnCell.x,
       y: this.spawnCell.y,
       keys: 0,
@@ -163,20 +168,36 @@ class GridPuzzle3D {
     });
   }
 
+  public async run(action: 'step' | 'toggle' | 'left' | 'right') {
+    const actions = {
+      step: "moveForward",
+      toggle: 'useAction',
+      left: 'turnLeft',
+      right: 'turnRight'
+    } as const
+    if(this.player.won) {
+      return "Press restart() to restart or level(leval_name) to choose another level"
+    }
+    if(this.player.mesh.isDisposed()) {
+      return "The player is dead, call restart() to restart"
+    }
+    return await this[actions[action]]()
+  }
+
   // Public methods for Python REPL control
-  public async moveForward() {
+  private async moveForward() {
     if (this.player.moving) return;
     return this.movePlayerForwardAsync();
   }
 
-  public async turnLeft(): Promise<void> {
+  private async turnLeft(): Promise<void> {
     if (this.player.moving) return;
     return new Promise((resolve) => {
       this.rotatePlayerAsync(Math.PI / 2, resolve);
     });
   }
 
-  public async turnRight(): Promise<void> {
+  private async turnRight(): Promise<void> {
     if (this.player.moving) return;
     return new Promise((resolve) => {
       this.rotatePlayerAsync(-Math.PI / 2, resolve);
@@ -233,7 +254,7 @@ class GridPuzzle3D {
     return await this.attemptMoveAsync(gridDx, gridDy);
   }
 
-  public async useAction(): Promise<void | string> {
+  private async useAction(): Promise<void | string> {
     // First check if there's a button on current position
     const currentKey = parts.keyOf(this.player.x, this.player.y);
     if (this.buttons.has(currentKey)) {
@@ -587,10 +608,10 @@ class GridPuzzle3D {
     }
 
     // Move player with completion callback
-    await this.movePlayerAsync(nx, ny);
+    return await this.movePlayerAsync(nx, ny);
   }
 
-  private async movePlayerAsync(nx: number, ny: number): Promise<void> {
+  private async movePlayerAsync(nx: number, ny: number) {
     this.player.moving = true;
 
     // Store initial positions for camera following
@@ -610,8 +631,7 @@ class GridPuzzle3D {
     this.player.x = nx;
     this.player.y = ny;
     this.player.moving = false;
-    await this.handlePlayerLanded();
-
+    return this.handlePlayerLanded();
   }
 
   private async tweenPlayerAndCamera(
@@ -677,7 +697,7 @@ class GridPuzzle3D {
 
   private async triggerWinAnimation(): Promise<string> {
     this.player.moving = true; // Prevent further movement during animation
-
+    this.player.won = new Date
     // Find the exit group to enhance its glow
     const exitKey = parts.keyOf(this.exitCell.x, this.exitCell.y);
     const exitGroup = this.scene.getMeshByName(`exitGroup_${this.exitCell.x}_${this.exitCell.y}`);

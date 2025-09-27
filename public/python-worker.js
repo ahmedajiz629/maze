@@ -10,25 +10,15 @@ let sharedData = null;
 // [2...] = JSON data as UTF-16 char codes
 
 // Helper function to call game methods synchronously via SharedArrayBuffer
-function callGameMethodSync(methodName) {
-  const methodMap = {
-    'step': 1,
-    'left': 2,
-    'right': 3,
-    'toggle': 4
-  };
-
-  const methodId = methodMap[methodName];
+function callGameMethodSync(method, ...args) {
   
   // Reset ready flag
   Atomics.store(sharedData, 0, 0);
   
-  // Write method ID
-  Atomics.store(sharedData, 1, methodId);
-  
   // Notify main thread
   postMessage({
-    type: "gameMethodSync"
+    type: "gameMethodSync",
+    data: {method,args}
   });
 
   // Active wait on shared memory
@@ -43,7 +33,12 @@ function callGameMethodSync(methodName) {
     jsonString += String.fromCharCode(Atomics.load(sharedData, 2 + i));
   }
 
-  return JSON.parse(jsonString);
+  const response =  JSON.parse(jsonString);
+  if(response === '$$') {
+    pyodide.globals.set("gameControllerReady", true);
+    return 'Level loaded'
+  }
+  return response
 }
 
 // Load Pyodide in the worker
@@ -54,6 +49,7 @@ async function initPyodide() {
 
     // Make the game method caller available globally
     pyodide.globals.set("callGameMethodSync", callGameMethodSync);
+    pyodide.globals.set("gameControllerReady", false);
 
 
 
@@ -64,40 +60,34 @@ import time
 # Simple synchronous functions using SharedArrayBuffer communication
 def step():
     """Move player forward"""
-    if not gameControllerReady:
-        print("Game not ready yet")
-        return None
     return callGameMethodSync('step')
 
 def left():
     """Turn player left"""
-    if not gameControllerReady:
-        print("Game not ready yet")
-        return None
     return callGameMethodSync('left')
 
 def right():
     """Turn player right"""
-    if not gameControllerReady:
-        print("Game not ready yet")
-        return None
     return callGameMethodSync('right')
 
 def toggle():
     """Use/interact with items"""
-    if not gameControllerReady:
-        print("Game not ready yet")
-        return None
     return callGameMethodSync('toggle')
+
+def level(name):
+    """Change level"""
+    return callGameMethodSync('level', name)
+
+def restart():
+    """Change level"""
+    return callGameMethodSync('restart')
 
 def sleep(seconds):
     """Sleep function that works in web worker"""
     import time
     time.sleep(seconds)
 
-print("Game controller functions ready!")
-print("Available commands: step(), left(), right(), toggle(), sleep()")
-print("These functions are truly synchronous - no await needed!")
+level('$')
     `);
 
     postMessage({
@@ -119,20 +109,9 @@ onmessage = async function (e) {
 
   switch (type) {
     case "init":
-      await initPyodide();
-      break;
-
-    case "setSharedBuffer":
       sharedBuffer = e.data.sharedBuffer;
       sharedData = new Int32Array(sharedBuffer);
-      console.log("SharedArrayBuffer initialized in worker");
-      break;
-
-    case "setGameController":
-      gameControllerReady = true;
-      if (pyodide) {
-        pyodide.globals.set("gameControllerReady", gameControllerReady);
-      }
+      await initPyodide();
       break;
 
     case "runCode":

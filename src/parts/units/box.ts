@@ -15,9 +15,9 @@ export const makeBox = async (scene: Scene, config: { TILE: number }) => {
       mesh.parent = boxGroup;
     }
   });
-  const h = .4
+  const h = .43
   boxGroup.scaling = new Vector3(h, h, h);
-  boxGroup.rotation.y = .2;
+  boxGroup.rotation.y = .24;
   boxGroup.position.y = - 0.5 * config.TILE;
   const boxGroup2 = new Mesh(`minecraftBox`, scene);
   boxGroup.parent = boxGroup2;
