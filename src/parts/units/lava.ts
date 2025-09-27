@@ -36,8 +36,26 @@ export const makeLava = (scene: Scene, config: { TILE: number }) => {
 
 }
 
-export const createLava = (scene: Scene, config: { TILE: number }, i: number, j: number, p: Vector3, state: { lava: Map<string, AbstractMesh> }): void => {
-  const lavaGroup = makeLava(scene, { TILE: config.TILE });
+export const createLava = (
+  scene: Scene,
+  config: { TILE: number }, 
+  i: number, 
+  j: number, 
+  p: Vector3,
+  state: { 
+    lava: Map<string, { mesh: AbstractMesh, interval: number | null, isPassable: boolean }>,
+  },
+  interval: number | null // 0-9
+): void => {
+  // Use the existing makeLava function to create the lava mesh
+  const lavaGroup = makeLava(scene, config);
   lavaGroup.position = p.add(new Vector3(0, 0.1, 0));
-  state.lava.set(keyOf(i, j), lavaGroup);
-};
+  
+  // Store in timed lava collection
+  state.lava.set(keyOf(i, j), {
+    mesh: lavaGroup,
+    interval: interval,
+    isPassable: false
+  });
+  
+}

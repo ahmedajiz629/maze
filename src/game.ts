@@ -33,9 +33,9 @@ class GridPuzzle3D {
   private readonly MAP = [
     "...#################",
     ".StyB.#........a..E#",
-    "#~##.#.#####A#######",
-    "#~...#.....#.......#",
-    "###.###.#.#.###.#..#",
+    "#0##.#.#####A#######",
+    "#123.#.....#.......#",
+    "###4###.#.#.###.#..#",
     "#..B....#.#...#.#..#",
     "#D#~#####.#.#.#.#..#",
     "#...d.....#.#.#....#",
@@ -57,6 +57,7 @@ class GridPuzzle3D {
   private readonly WALL_H = 2; // wall height
   private readonly MOVE_MS = 140; // move tween duration
   private readonly PUSH_MS = 120; // box push tween duration
+  private readonly TIME_MS = 10000; // button effect duration in ms
 
   private engine!: Engine;
   private scene!: Scene;
@@ -76,9 +77,8 @@ class GridPuzzle3D {
   private autoDoors = new Map<string, AbstractMesh>();
   private boxes = new Map<string, AbstractMesh>();
   private keys = new Map<string, AbstractMesh>();
-  private lava = new Map<string, AbstractMesh>();
   private buttons = new Map<string, { mesh: AbstractMesh, direction: number, toggled: boolean }>();
-  private timedLava = new Map<string, { mesh: AbstractMesh, interval: number, isPassable: boolean }>();
+  private lava = new Map<string, { mesh: AbstractMesh, interval: number | null, isPassable: boolean }>();
 
   // UI elements
   private hudElement: HTMLElement;
@@ -109,7 +109,7 @@ class GridPuzzle3D {
 
   private async initializeGameAsync(): Promise<void> {
     // Initialize geometry first (this loads the box model)
-    
+
     // Initialize the map (this will load all keys)
     const cells = await parts.initMap(this.scene, { MAP: this.MAP, WALL_H: this.WALL_H, TILE: this.TILE }, {
       wallUnit: this.wallUnit,
@@ -121,7 +121,6 @@ class GridPuzzle3D {
       keys: this.keys,
       lava: this.lava,
       buttons: this.buttons,
-      timedLava: this.timedLava
     });
     Object.assign(this, cells); // Get spawn and exit cells
 
@@ -259,22 +258,22 @@ class GridPuzzle3D {
     const currentKey = parts.keyOf(this.player.x, this.player.y);
     if (this.buttons.has(currentKey)) {
       const button = this.buttons.get(currentKey)!;
-      
+
       // Check if player is facing the correct direction
       const playerDirection = (-this.player.rotation + 2 * Math.PI) % (2 * Math.PI);
-      const buttonDirection = (button.direction + 5 * Math.PI/2) % (2 * Math.PI);
+      const buttonDirection = (button.direction + 5 * Math.PI / 2) % (2 * Math.PI);
       const directionThreshold = 0.1; // Small tolerance for direction matching
-      
+
       const directionMatch = Math.abs(playerDirection - buttonDirection) < directionThreshold ||
-                            Math.abs(playerDirection - buttonDirection) > (2 * Math.PI - directionThreshold);
-      
+        Math.abs(playerDirection - buttonDirection) > (2 * Math.PI - directionThreshold);
+
       if (directionMatch && !button.toggled) {
         // Toggle the button
         button.toggled = true;
-        
+
         // Animate button press - find mesh with $ suffix and move it down
         await this.animateButtonPress(button.mesh);
-        
+
         return "Button activated!";
       } else if (button.toggled) {
         return "Button already activated.";
@@ -381,7 +380,7 @@ class GridPuzzle3D {
 
       // Open all auto doors
       this.openAllAutoDoors();
-      
+
       // Start timed lava intervals
       this.startTimedLavaIntervals();
 
@@ -389,47 +388,47 @@ class GridPuzzle3D {
       setTimeout(async () => {
         // Close all auto doors
         await this.closeAllAutoDoors();
-        
+
         // Reset timed lava to non-passable
         this.resetTimedLava();
-        
+
         // Reset button position
         await this.resetButtonPosition(innerButtonMesh, startX);
-        
+
         // Reset button toggle state
         const currentKey = parts.keyOf(this.player.x, this.player.y);
         if (this.buttons.has(currentKey)) {
           this.buttons.get(currentKey)!.toggled = false;
         }
-      }, 5000);
+      }, this.TIME_MS);
     }
   }
 
   private async openAllAutoDoors(): Promise<void> {
     const openPromises: Promise<void>[] = [];
-    
+
     for (const [key, doorMesh] of this.autoDoors.entries()) {
       // Remove from blocked set to allow passage
       this.blocked.delete(key);
-      
+
       // Animate door opening
       openPromises.push(this.openDoorAsync(doorMesh));
     }
-    
+
     await Promise.all(openPromises);
   }
 
   private async closeAllAutoDoors(): Promise<void> {
     const closePromises: Promise<void>[] = [];
-    
+
     for (const [key, doorMesh] of this.autoDoors.entries()) {
       // Add back to blocked set
       this.blocked.add(key);
-      
+
       // Animate door closing
       closePromises.push(this.closeDoorAsync(doorMesh));
     }
-    
+
     await Promise.all(closePromises);
   }
 
@@ -493,8 +492,8 @@ class GridPuzzle3D {
 
   private startTimedLavaIntervals(): void {
     // 5 second duration, 10 intervals of 0.5 seconds each
-    const intervalDuration = 500; // 0.5 seconds in milliseconds
-    
+    const intervalDuration = this.TIME_MS / 10; // 0.5 seconds in milliseconds
+
     for (let i = 0; i < 10; i++) {
       setTimeout(() => {
         // During interval i, lava blocks i and (i+1) become passable
@@ -504,34 +503,29 @@ class GridPuzzle3D {
   }
 
   private updateTimedLavaPassability(currentInterval: number, isPassable: boolean): void {
-    for (const [key, lavaData] of this.timedLava.entries()) {
+    for (const [key, lavaData] of this.lava.entries()) {
+      if (lavaData.interval === null) continue; // Skip non-timed lava
       // Lava block becomes passable during its interval and the next one
       if (Math.abs(lavaData.interval - currentInterval) <= 1) {
         lavaData.isPassable = isPassable == (lavaData.interval >= currentInterval);
-        
+
         // Simply hide/show the lava mesh
         lavaData.mesh.setEnabled(!lavaData.isPassable); // Hide when passable, show when not passable
-        
-        // Update blocked state
-        if (lavaData.isPassable) {
-          this.blocked.delete(key);
-        } else {
-          this.blocked.add(key);
-        }
+
+        // No blocking - player can walk through when disabled, dies when enabled
       }
     }
   }
 
   private resetTimedLava(): void {
-    // Reset all timed lava to non-passable state
-    for (const [key, lavaData] of this.timedLava.entries()) {
+    // Reset all timed lava to non-passable (deadly) state
+    for (const [key, lavaData] of this.lava.entries()) {
+      if (lavaData.interval === null) continue; // Skip non-timed lava
       lavaData.isPassable = false;
-      
       // Show all lava meshes again
       lavaData.mesh.setEnabled(true);
-      
-      // Re-add to blocked set
-      this.blocked.add(key);
+
+      // No blocking needed - lava kills, doesn't block
     }
   }
 
@@ -559,7 +553,7 @@ class GridPuzzle3D {
       if (!this.inBounds(bx, by) || this.isBlocked(bx, by)) {
         return "Can't push box";
       }
-      
+
       const box = this.boxes.get(targetKey)!;
       this.boxes.delete(targetKey);
       this.blocked.delete(targetKey);
@@ -574,7 +568,7 @@ class GridPuzzle3D {
           this.PUSH_MS,
           () => {
             // After box reaches lava, animate it falling down
-                lava.dispose();
+            lava.mesh.dispose();
             this.tweenPosition(
               box,
               this.cellToWorld(bx, by, -this.TILE / 2 + .1), // Fall below ground level
@@ -673,10 +667,13 @@ class GridPuzzle3D {
       this.updateHUD();
     }
 
-    // Lava check
+    // Timed lava check - only deadly when visible (not disabled)
     if (this.lava.has(playerKey)) {
-      this.player.mesh.dispose();
-      return "You fell in lava.";
+      const timedLavaData = this.lava.get(playerKey)!;
+      if (!timedLavaData.isPassable) { // If lava is visible, it's deadly
+        this.player.mesh.dispose();
+        return "You fell in lava.";
+      }
     }
 
     // Exit check
