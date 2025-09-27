@@ -1,6 +1,6 @@
 import { AbstractMesh, Mesh, Scene } from "@babylonjs/core";
 import { cellToWorld } from "./cellToWorld";
-import { createAutoDoor, createBox, createDoor, createKey, createLava, createWall, createButton } from "./units";
+import { createAutoDoor, createBox, createDoor, createKey, createLava, createWall, createButton, createTimedLava } from "./units";
 import { createExit } from "./units/exit";
 
 export const initMap = async (scene: Scene, config: { MAP: string[], WALL_H: number, TILE: number },
@@ -12,7 +12,8 @@ export const initMap = async (scene: Scene, config: { MAP: string[], WALL_H: num
     autoDoors: Map<string, AbstractMesh>,
     keys: Map<string, AbstractMesh>,
     lava: Map<string, AbstractMesh>,
-    buttons: Map<string, { mesh: AbstractMesh, direction: number, toggled: boolean }>
+    buttons: Map<string, { mesh: AbstractMesh, direction: number, toggled: boolean }>,
+    timedLava: Map<string, { mesh: AbstractMesh, interval: number, isPassable: boolean }>
   }) => {
   const W = config.MAP[0].length;
   const H = config.MAP.length;
@@ -63,6 +64,18 @@ export const initMap = async (scene: Scene, config: { MAP: string[], WALL_H: num
           break;
         case "~":
           createLava(scene, config, i, j, p, state);
+          break;
+        case "0":
+        case "1":
+        case "2":
+        case "3":
+        case "4":
+        case "5":
+        case "6":
+        case "7":
+        case "8":
+        case "9":
+          createTimedLava(scene, config, i, j, p, state, parseInt(ch));
           break;
         case "E":
           createExit(scene, config, i, j, p);

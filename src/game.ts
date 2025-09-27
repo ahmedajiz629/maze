@@ -44,9 +44,9 @@ class GridPuzzle3D {
     "#.###.#.###.#####..#",
     "#.#...#...#.....#..#",
     "#.#.#####.#####.#..#",
-    "#.#.......#...#.#..#",
-    "#.#######.#.#.#.#..#",
-    "#.....~...#.#.#....#",
+    "#.#......9#...#.#..#",
+    "#.#######8#.#.#.#..#",
+    "#01234~567#.#.#....#",
     "###.###.###.#.######",
     "#.....#.....#......#",
     "#.d...#.K.Y.#..B...#",
@@ -78,6 +78,7 @@ class GridPuzzle3D {
   private keys = new Map<string, AbstractMesh>();
   private lava = new Map<string, AbstractMesh>();
   private buttons = new Map<string, { mesh: AbstractMesh, direction: number, toggled: boolean }>();
+  private timedLava = new Map<string, { mesh: AbstractMesh, interval: number, isPassable: boolean }>();
 
   // UI elements
   private hudElement: HTMLElement;
@@ -119,7 +120,8 @@ class GridPuzzle3D {
       autoDoors: this.autoDoors,
       keys: this.keys,
       lava: this.lava,
-      buttons: this.buttons
+      buttons: this.buttons,
+      timedLava: this.timedLava
     });
     Object.assign(this, cells); // Get spawn and exit cells
 
@@ -378,12 +380,18 @@ class GridPuzzle3D {
       });
 
       // Open all auto doors
-      await this.openAllAutoDoors();
+      this.openAllAutoDoors();
+      
+      // Start timed lava intervals
+      this.startTimedLavaIntervals();
 
       // Wait 5 seconds, then close doors and reset button
       setTimeout(async () => {
         // Close all auto doors
         await this.closeAllAutoDoors();
+        
+        // Reset timed lava to non-passable
+        this.resetTimedLava();
         
         // Reset button position
         await this.resetButtonPosition(innerButtonMesh, startX);
@@ -483,6 +491,49 @@ class GridPuzzle3D {
     });
   }
 
+  private startTimedLavaIntervals(): void {
+    // 5 second duration, 10 intervals of 0.5 seconds each
+    const intervalDuration = 500; // 0.5 seconds in milliseconds
+    
+    for (let i = 0; i < 10; i++) {
+      setTimeout(() => {
+        // During interval i, lava blocks i and (i+1) become passable
+        this.updateTimedLavaPassability(i, true);
+      }, i * intervalDuration);
+    }
+  }
+
+  private updateTimedLavaPassability(currentInterval: number, isPassable: boolean): void {
+    for (const [key, lavaData] of this.timedLava.entries()) {
+      // Lava block becomes passable during its interval and the next one
+      if (Math.abs(lavaData.interval - currentInterval) <= 1) {
+        lavaData.isPassable = isPassable == (lavaData.interval >= currentInterval);
+        
+        // Simply hide/show the lava mesh
+        lavaData.mesh.setEnabled(!lavaData.isPassable); // Hide when passable, show when not passable
+        
+        // Update blocked state
+        if (lavaData.isPassable) {
+          this.blocked.delete(key);
+        } else {
+          this.blocked.add(key);
+        }
+      }
+    }
+  }
+
+  private resetTimedLava(): void {
+    // Reset all timed lava to non-passable state
+    for (const [key, lavaData] of this.timedLava.entries()) {
+      lavaData.isPassable = false;
+      
+      // Show all lava meshes again
+      lavaData.mesh.setEnabled(true);
+      
+      // Re-add to blocked set
+      this.blocked.add(key);
+    }
+  }
 
   private async attemptMoveAsync(dx: number, dy: number) {
     const nx = this.player.x + dx;

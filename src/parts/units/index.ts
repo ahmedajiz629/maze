@@ -8,3 +8,4 @@ export * from './lava';
 export * from './camera';
 export * from './door-auto';
 export * from './button';
+export * from './timed-lava';
