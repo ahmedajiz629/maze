@@ -90,7 +90,7 @@ export class PythonREPL {
   set level(level) {
     localStorage.setItem('level', level!)
   }
-  private async handleSyncGameMethod(method: 'step' | 'left' | 'right' | 'toggle' | 'level' | 'restart', args: unknown[]): Promise<void> {
+  private async handleSyncGameMethod(method: 'step' | 'left' | 'right' | 'toggle' | 'safe' | 'level' | 'restart', args: unknown[]): Promise<void> {
     if (!this.sharedData) return;
 
     // Read method from shared memory  

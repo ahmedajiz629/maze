@@ -74,6 +74,10 @@ def toggle():
     """Use/interact with items"""
     return callGameMethodSync('toggle')
 
+def safe():
+    """Check if the next position is safe"""
+    return callGameMethodSync('safe')
+
 def level(name):
     """Change level"""
     return callGameMethodSync('level', name)
@@ -141,20 +145,21 @@ sys.stdout = StringIO()
         const p = pyodide.runPythonAsync(code);
         console.log('Code running:', code);
         result = await p
+        pyodide.globals.set("_", result);
 
         // Get stdout output
         const output = pyodide.runPython(`
+if _ is not None: print(_)
 output = sys.stdout.getvalue()
 sys.stdout = old_stdout
 output
         `);
+        console.log({output})
 
         postMessage({
           type: "result",
           data: {
             output: output || "",
-            result:
-              result !== undefined && result !== null ? String(result) : null,
           },
         });
       } catch (error) {

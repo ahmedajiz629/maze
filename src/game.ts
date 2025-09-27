@@ -86,7 +86,7 @@ class GridPuzzle3D {
     // Initialize map and load player asynchronously  
     this.initGeometry();
   }
-  
+
   public dispose() {
     this.scene.dispose()
   }
@@ -168,20 +168,34 @@ class GridPuzzle3D {
     });
   }
 
-  public async run(action: 'step' | 'toggle' | 'left' | 'right') {
+  public async run(action: 'step' | 'toggle' | 'left' | 'right' | 'safe') {
     const actions = {
       step: "moveForward",
       toggle: 'useAction',
       left: 'turnLeft',
-      right: 'turnRight'
+      right: 'turnRight',
+      safe: 'safe'
     } as const
-    if(this.player.won) {
+    if (this.player.won) {
       return "Press restart() to restart or level(leval_name) to choose another level"
     }
-    if(this.player.mesh.isDisposed()) {
+    if (this.player.mesh.isDisposed()) {
       return "The player is dead, call restart() to restart"
     }
     return await this[actions[action]]()
+  }
+
+  private async safe() {
+    const { nx, ny } = this.computeNextPosition()
+    const playerKey = parts.keyOf(nx, ny)
+    if (this.isBlocked(nx, ny)) return false
+    if (this.lava.has(playerKey)) {
+      const timedLavaData = this.lava.get(playerKey)!;
+      if (!timedLavaData.isPassable) {
+        return false
+      }
+    }
+    return true
   }
 
   // Public methods for Python REPL control
@@ -242,16 +256,17 @@ class GridPuzzle3D {
     });
   }
 
-  private async movePlayerForwardAsync() {
+  private computeNextPosition() {
     // Calculate the direction vector based on player rotation
-    const dx = Math.cos(this.player.rotation);
-    const dy = Math.sin(this.player.rotation);
+    const _dx = Math.cos(this.player.rotation);
+    const _dy = Math.sin(this.player.rotation);
 
     // Round to get grid-aligned movement
-    const gridDx = Math.round(dx);
-    const gridDy = Math.round(dy);
-
-    return await this.attemptMoveAsync(gridDx, gridDy);
+    const dx = Math.round(_dx);
+    const dy = Math.round(_dy);
+    const nx = this.player.x + Math.round(dx);
+    const ny = this.player.y + Math.round(dy);
+    return { dx, dy, nx, ny }
   }
 
   private async useAction(): Promise<void | string> {
@@ -390,7 +405,7 @@ class GridPuzzle3D {
         // Close all auto doors
         await this.closeAllAutoDoors();
         button.toggled = false
-        
+
         // Reset timed lava to non-passable
         this.resetTimedLava();
 
@@ -505,34 +520,36 @@ class GridPuzzle3D {
   }
 
   private updateTimedLavaPassability(currentInterval: number): void {
-    for (const [key, lavaData] of this.lava.entries()) {
+    for (const lavaData of this.lava.values()) {
       if (lavaData.interval === null) continue; // Skip non-timed lava
       // Lava block becomes passable during its interval and the next one
       if (Math.abs(lavaData.interval - currentInterval) <= 1) {
-        const wasPassable = lavaData.isPassable;
         lavaData.isPassable = (lavaData.interval >= currentInterval);
 
         // Simply hide/show the lava mesh
         lavaData.mesh.setEnabled(!lavaData.isPassable); // Hide when passable, show when not passable
 
-        // Check if player is standing on this lava when it becomes deadly
-        if (wasPassable && !lavaData.isPassable) {
-          const playerKey = parts.keyOf(this.player.x, this.player.y);
-          if (key === playerKey) {
-            // Player is standing on lava that just became deadly
-            this.player.mesh.dispose();
-            this.bannerElement.textContent = "You fell in lava.";
-            this.bannerElement.style.display = 'block';
-            setTimeout(()=>{this.bannerElement.style.display = 'none'}, 2000)
-          }
-        }
       }
+    }
+    this.checkLava()
+  }
+
+  private checkLava() {
+    const playerKey = parts.keyOf(this.player.x, this.player.y);
+    const lavaData = this.lava.get(playerKey)
+    if (!lavaData) return
+    if (!lavaData.isPassable) {
+      // Player is standing on lava that just became deadly
+      this.player.mesh.dispose();
+      this.bannerElement.textContent = "You fell in lava.";
+      this.bannerElement.style.display = 'block';
+      setTimeout(() => { this.bannerElement.style.display = 'none' }, 2000)
     }
   }
 
   private resetTimedLava(): void {
     // Reset all timed lava to non-passable (deadly) state
-    for (const [key, lavaData] of this.lava.entries()) {
+    for (const lavaData of this.lava.values()) {
       if (lavaData.interval === null) continue; // Skip non-timed lava
       lavaData.isPassable = false;
       // Show all lava meshes again
@@ -540,12 +557,12 @@ class GridPuzzle3D {
 
       // No blocking needed - lava kills, doesn't block
     }
+    this.checkLava()
   }
 
-  private async attemptMoveAsync(dx: number, dy: number) {
-    const nx = this.player.x + dx;
-    const ny = this.player.y + dy;
+  private async movePlayerForwardAsync() {
 
+    const { dx, dy, nx, ny } = this.computeNextPosition()
     if (!this.inBounds(nx, ny)) {
       return "You can't go there";
     }
