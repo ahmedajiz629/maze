@@ -13,8 +13,6 @@ export async function initGifAnimation(scene: Scene, material: StandardMaterial,
   await imageDecoder.tracks.ready;
   await imageDecoder.completed;
 
-  console.log(imageDecoder, `GIF has ${imageDecoder.tracks[0].frameCount} frames`);
-
   const maxFrame = imageDecoder.tracks[0].frameCount;
 
   if (maxFrame <= 1) {

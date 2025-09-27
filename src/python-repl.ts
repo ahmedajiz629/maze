@@ -58,6 +58,10 @@ export class PythonREPL {
             if (data.result) {
               this.updateConsole(data.result + '\n');
             }
+            if (data.add) {
+              const [funcName, code] = data.add;
+              self.localStorage.setItem(`py:${funcName}`, code);
+            }
             this.showPrompt();
             break;
 
@@ -81,7 +85,8 @@ export class PythonREPL {
 
       // Initialize Pyodide in the worker
       this.pythonWorker.postMessage({
-        type: 'init', sharedBuffer: this.sharedBuffer
+        type: 'init', sharedBuffer: this.sharedBuffer,
+        predefined: Object.entries(localStorage).flatMap(([k, v]) => k.startsWith('py:') ? [v] : [])
       });
 
     } catch (error) {
@@ -106,7 +111,7 @@ export class PythonREPL {
     }
     if (method === 'level') {
       let l = args[0] as undefined | string
-      if(l === '$') l = this.level ?? Object.keys('levels')[0]
+      if (l === '$') l = this.level ?? Object.keys('levels')[0]
       const level = l && levels[l]
       if (typeof l !== 'string') {
         methodResult = 'Please select a level first'
@@ -148,10 +153,6 @@ export class PythonREPL {
     Atomics.notify(this.sharedData, 0);
   }
 
-  private clearConsole(): void {
-    this.consoleElement.innerHTML = '';
-  }
-
   private updateConsole(text: string): void {
     const lines = text.split('\n');
     for (let i = 0; i < lines.length; i++) {
@@ -168,15 +169,15 @@ export class PythonREPL {
   private showPrompt(): void {
     const prompt = this.isMultiLine ? '... ' : '>>> ';
     this.consoleElement.appendChild(document.createTextNode(prompt));
-    
+
     // Create input line container
     const inputContainer = document.createElement('span');
     inputContainer.className = 'input-line';
     this.consoleElement.appendChild(inputContainer);
-    
+
     // Update the input display
     this.updateCurrentLineDisplay();
-    
+
     this.consoleElement.scrollTop = this.consoleElement.scrollHeight;
   }
 
@@ -184,24 +185,24 @@ export class PythonREPL {
     // Find the input line container
     const inputContainer = this.consoleElement.querySelector('.input-line') as HTMLSpanElement;
     if (!inputContainer) return;
-    
+
     // Clear the container
     inputContainer.innerHTML = '';
-    
+
     // Split current line at cursor position
     const beforeCursor = this.currentLine.slice(0, this.cursorPosition);
     const afterCursor = this.currentLine.slice(this.cursorPosition);
-    
+
     // Add text before cursor
     if (beforeCursor) {
       inputContainer.appendChild(document.createTextNode(beforeCursor));
     }
-    
+
     // Add cursor
     const cursor = document.createElement('span');
     cursor.className = 'cursor';
     inputContainer.appendChild(cursor);
-    
+
     // Add text after cursor
     if (afterCursor) {
       inputContainer.appendChild(document.createTextNode(afterCursor));
@@ -216,17 +217,17 @@ export class PythonREPL {
     // Simple heuristic: if line ends with : or is indented, continue
     const lines = code.split('\n');
     const lastLine = lines[lines.length - 1];
-    
+
     // If line ends with colon, need more input
     if (lastLine.trim().endsWith(':')) {
       return true;
     }
-    
+
     // If line is indented and not empty, need more input
     if (lastLine.match(/^\s+\S/)) {
       return true;
     }
-    
+
     // If we have an incomplete statement (unmatched brackets, quotes, etc.)
     try {
       // This is a simple check - in a real implementation you'd use AST parsing
@@ -234,7 +235,7 @@ export class PythonREPL {
       const closeBrackets = (code.match(/[\)\]\}]/g) || []).length;
       const singleQuotes = (code.match(/'/g) || []).length;
       const doubleQuotes = (code.match(/"/g) || []).length;
-      
+
       if (openBrackets !== closeBrackets || singleQuotes % 2 !== 0 || doubleQuotes % 2 !== 0) {
         return true;
       }
@@ -242,7 +243,7 @@ export class PythonREPL {
       // If we can't parse, assume we need more input
       return true;
     }
-    
+
     return false;
   }
 
@@ -264,27 +265,27 @@ export class PythonREPL {
       // Remove cursor and show complete line
       const cursor = inputContainer.querySelector('.cursor');
       if (cursor) cursor.remove();
-      
+
       // Make sure the complete current line is shown
       inputContainer.textContent = this.currentLine;
-      
+
       // Remove the input-line class so it won't be found again
       inputContainer.classList.remove('input-line');
     }
-    
+
     // Add newline
     this.consoleElement.appendChild(document.createTextNode('\n'));
 
     if (this.isMultiLine) {
       // Add current line to buffer
       this.multiLineBuffer.push(this.currentLine);
-      
+
       // Check if we should end multi-line mode
       if (this.currentLine.trim() === '' || !this.needsMoreInput(this.multiLineBuffer.join('\n'))) {
         // Execute the multi-line code
         const code = this.multiLineBuffer.join('\n');
         this.executeCode(code);
-        
+
         // Reset state
         this.multiLineBuffer = [];
         this.isMultiLine = false;
@@ -298,7 +299,7 @@ export class PythonREPL {
         this.showPrompt();
         return;
       }
-      
+
       if (this.needsMoreInput(this.currentLine)) {
         // Enter multi-line mode
         this.isMultiLine = true;
@@ -315,7 +316,7 @@ export class PythonREPL {
         return;
       }
     }
-    
+
     // Continue multi-line input
     this.currentLine = '';
     this.cursorPosition = 0;
@@ -333,52 +334,52 @@ export class PythonREPL {
         case 'Enter':
           this.handleEnter();
           break;
-          
+
         case 'Backspace':
           if (this.cursorPosition > 0) {
-            this.currentLine = this.currentLine.slice(0, this.cursorPosition - 1) + 
-                             this.currentLine.slice(this.cursorPosition);
+            this.currentLine = this.currentLine.slice(0, this.cursorPosition - 1) +
+              this.currentLine.slice(this.cursorPosition);
             this.cursorPosition--;
             this.updateCurrentLine();
           }
           break;
-          
+
         case 'Delete':
           if (this.cursorPosition < this.currentLine.length) {
-            this.currentLine = this.currentLine.slice(0, this.cursorPosition) + 
-                             this.currentLine.slice(this.cursorPosition + 1);
+            this.currentLine = this.currentLine.slice(0, this.cursorPosition) +
+              this.currentLine.slice(this.cursorPosition + 1);
             this.updateCurrentLine();
           }
           break;
-          
+
         case 'ArrowLeft':
           if (this.cursorPosition > 0) {
             this.cursorPosition--;
             // Update cursor position visually would require more complex cursor management
           }
           break;
-          
+
         case 'ArrowRight':
           if (this.cursorPosition < this.currentLine.length) {
             this.cursorPosition++;
             // Update cursor position visually would require more complex cursor management
           }
           break;
-          
+
         case 'Home':
           this.cursorPosition = 0;
           break;
-          
+
         case 'End':
           this.cursorPosition = this.currentLine.length;
           break;
-          
+
         default:
           // Handle printable characters
           if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-            this.currentLine = this.currentLine.slice(0, this.cursorPosition) + 
-                             e.key + 
-                             this.currentLine.slice(this.cursorPosition);
+            this.currentLine = this.currentLine.slice(0, this.cursorPosition) +
+              e.key +
+              this.currentLine.slice(this.cursorPosition);
             this.cursorPosition++;
             this.updateCurrentLine();
           }
@@ -388,7 +389,7 @@ export class PythonREPL {
 
     // Focus the console so it can receive keyboard input
     this.consoleElement.focus();
-    
+
     // Refocus when clicked
     this.consoleElement.addEventListener('click', () => {
       this.consoleElement.focus();

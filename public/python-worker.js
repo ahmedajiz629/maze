@@ -42,7 +42,7 @@ function callGameMethodSync(method, ...args) {
 }
 
 // Load Pyodide in the worker
-async function initPyodide() {
+async function initPyodide(predefined) {
   try {
     importScripts("https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js");
     pyodide = await loadPyodide();
@@ -90,7 +90,7 @@ def sleep(seconds):
     """Sleep function that works in web worker"""
     import time
     time.sleep(seconds)
-
+${predefined.join('\n')}
 level('$')
     `);
 
@@ -115,7 +115,7 @@ onmessage = async function (e) {
     case "init":
       sharedBuffer = e.data.sharedBuffer;
       sharedData = new Int32Array(sharedBuffer);
-      await initPyodide();
+      await initPyodide(e.data.predefined);
       break;
 
     case "runCode":
@@ -145,6 +145,7 @@ sys.stdout = StringIO()
         const p = pyodide.runPythonAsync(code);
         console.log('Code running:', code);
         result = await p
+        const match = /def\s+(\w+)\s*\(.*\):/.exec(code);
         pyodide.globals.set("_", result);
 
         // Get stdout output
@@ -160,6 +161,7 @@ output
           type: "result",
           data: {
             output: output || "",
+            add: match ? [match[1], code]: null
           },
         });
       } catch (error) {
