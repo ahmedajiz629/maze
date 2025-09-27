@@ -3,22 +3,14 @@ let pyodide = null;
 let gameControllerReady = false;
 let sharedBuffer = null;
 let sharedData = null;
-let messageIdCounter = 0;
 
 // SharedArrayBuffer layout:
-// [0] = messageId (for correlation)
-// [1] = method (1=step, 2=left, 3=right, 4=toggle)
-// [2-4] = args (reserved for future use)
-// [5] = result (0=success, -1=error)
-// [6] = ready flag (0=not ready, 1=ready)
+// [0] = ready flag (0=not ready, 1=ready)
+// [1] = data length 
+// [2...] = JSON data as UTF-16 char codes
 
 // Helper function to call game methods synchronously via SharedArrayBuffer
 function callGameMethodSync(methodName) {
-  if (!sharedData) {
-    throw new Error("SharedArrayBuffer not initialized");
-  }
-
-  // Map method names to numbers
   const methodMap = {
     'step': 1,
     'left': 2,
@@ -27,40 +19,31 @@ function callGameMethodSync(methodName) {
   };
 
   const methodId = methodMap[methodName];
-  if (!methodId) {
-    throw new Error(`Unknown method: ${methodName}`);
-  }
-
-  // Generate unique message ID
-  messageIdCounter = (messageIdCounter + 1) % 1000000;
   
   // Reset ready flag
-  Atomics.store(sharedData, 6, 0);
+  Atomics.store(sharedData, 0, 0);
   
-  // Write request to shared memory
-  Atomics.store(sharedData, 0, messageIdCounter); // messageId
-  Atomics.store(sharedData, 1, methodId); // method
+  // Write method ID
+  Atomics.store(sharedData, 1, methodId);
   
   // Notify main thread
   postMessage({
-    type: "gameMethodSync",
-    messageId: messageIdCounter
+    type: "gameMethodSync"
   });
 
   // Active wait on shared memory
-  while (Atomics.load(sharedData, 6) === 0) {
+  while (Atomics.load(sharedData, 0) === 0) {
     // Busy wait - will be unblocked when main thread sets ready flag
-    // This is intentionally blocking to make Python code synchronous
   }
 
-  // Read result
-  const result = Atomics.load(sharedData, 5);
-  
-  if (result !== 0) {
-    throw new Error(`Game method failed: ${result}`);
+  // Read JSON result
+  const dataLength = Atomics.load(sharedData, 1);
+  let jsonString = '';
+  for (let i = 0; i < dataLength; i++) {
+    jsonString += String.fromCharCode(Atomics.load(sharedData, 2 + i));
   }
 
-  return result;
+  return JSON.parse(jsonString);
 }
 
 // Load Pyodide in the worker

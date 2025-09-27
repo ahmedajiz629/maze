@@ -25,8 +25,8 @@ export class PythonREPL {
   private initPythonWorker(): void {
     try {
       // Create SharedArrayBuffer for synchronous communication
-      // Structure: [messageId, method, arg1, arg2, arg3, result, ready]
-      this.sharedBuffer = new SharedArrayBuffer(7 * 4); // 7 int32 values
+      // Structure: [0] = ready flag, [1] = data length, [2...] = JSON data as UTF-16 codes
+      this.sharedBuffer = new SharedArrayBuffer(1024 * 4); // 1KB for JSON data
       this.sharedData = new Int32Array(this.sharedBuffer);
       
       this.pythonWorker = new Worker(CONFIG.PYTHON_WORKER_URL);
@@ -88,40 +88,40 @@ export class PythonREPL {
   private async handleSyncGameMethod(): Promise<void> {
     if (!this.sharedData) return;
     
-    try {
-      // Read method from shared memory
-      const method = Atomics.load(this.sharedData, 1);
-      let result = 0; // Default success
+    // Read method from shared memory  
+    const method = Atomics.load(this.sharedData, 1);
+    let methodResult: any;
 
-      switch (method) {
-        case 1: // step
-          await this.gameController?.moveForward?.();
-          break;
-        case 2: // left
-          await this.gameController?.turnLeft?.();
-          break;
-        case 3: // right
-          await this.gameController?.turnRight?.();
-          break;
-        case 4: // toggle
-          await this.gameController?.useAction?.();
-          break;
-        default:
-          result = -1; // Method not found
-      }
-
-      // Write result to shared memory
-      Atomics.store(this.sharedData, 5, result); // result at index 5
-      Atomics.store(this.sharedData, 6, 1); // ready flag at index 6
-      Atomics.notify(this.sharedData, 6); // Wake up the worker
-    } catch (error) {
-      console.error('Sync game method call failed:', error);
-      if (this.sharedData) {
-        Atomics.store(this.sharedData, 5, -1); // error result
-        Atomics.store(this.sharedData, 6, 1); // ready flag
-        Atomics.notify(this.sharedData, 6);
-      }
+    switch (method) {
+      case 1: // step
+        methodResult = await this.gameController?.moveForward?.();
+        break;
+      case 2: // left
+        methodResult = await this.gameController?.turnLeft?.();
+        break;
+      case 3: // right
+        methodResult = await this.gameController?.turnRight?.();
+        break;
+      case 4: // toggle
+        methodResult = await this.gameController?.useAction?.();
+        break;
     }
+
+    // JSON stringify the result and write to shared buffer
+    const jsonResult = JSON.stringify(methodResult ?? null);
+    const dataLength = jsonResult.length;
+    
+    // Write length at position 1
+    Atomics.store(this.sharedData, 1, dataLength);
+    
+    // Write JSON data starting at position 2
+    for (let i = 0; i < dataLength; i++) {
+      Atomics.store(this.sharedData, 2 + i, jsonResult.charCodeAt(i));
+    }
+
+    // Set ready flag last
+    Atomics.store(this.sharedData, 0, 1);
+    Atomics.notify(this.sharedData, 0);
   }
 
   private updateConsole(text: string): void {
