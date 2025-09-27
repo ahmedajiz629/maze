@@ -2,19 +2,23 @@ import { AbstractMesh, ImportMeshAsync, Mesh, Scene, Vector3 } from "@babylonjs/
 import { keyOf } from "../keyOf";
 
 
-export const makeDoor = async (scene: Scene, config: { TILE: number, WALL_H: number }) => {
-  const result = await ImportMeshAsync("assets/models/door.glb", scene);
+const makeDoor = async (scene: Scene, config: { TILE: number, WALL_H: number }) => {
+  const result = await ImportMeshAsync("assets/models/snake_doors.glb", scene);
 
   // Create a parent mesh for the imported stone door model
   const doorGroup_ = new Mesh(`stoneDoor$`, scene);
   doorGroup_.position = new Vector3(config.TILE * 0.25, config.TILE * 0.5, config.TILE * 0.25);
   doorGroup_.rotation.y = 0; // -Math.PI / 2 If open
   // Parent all imported meshes to our door group
+  const doorGroupDeep = new Mesh(`stoneDoorDeep`, scene);
+  doorGroupDeep.parent = doorGroup_;
+  doorGroupDeep.rotation.x = 0 * -Math.PI / 2; // Lay flat on ground
+  doorGroupDeep.position = new Vector3(-config.TILE * .75, config.TILE * 0.5, -config.TILE * .8);
   result.meshes.forEach(mesh => {
     if (mesh.name === "__root__") {
-      mesh.parent = doorGroup_;
+      mesh.parent = doorGroupDeep;
       // Scale the door to fit the tile size
-      const h = 3.5
+      const h = 0.07
       mesh.scaling = new Vector3(h, h, h); // Adjust scaling as needed
       mesh.position = new Vector3(.9 - config.TILE * 0.25, -1.5, 1 - config.TILE * 0.25); // Adjust scaling as needed
     }
@@ -25,7 +29,7 @@ export const makeDoor = async (scene: Scene, config: { TILE: number, WALL_H: num
   return doorGroup;
 }
 
-export const createDoor = async function (
+export const createAutoDoor = async function (
   scene: Scene,
   config: { TILE: number, WALL_H: number }, i: number, j: number, p: Vector3,
   state: { blocked: Set<string>, doors: Map<string, AbstractMesh> },

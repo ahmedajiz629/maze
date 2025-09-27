@@ -33,7 +33,10 @@ export const initMap = async (scene: Scene, config: { MAP: string[], WALL_H: num
           promises.push(createBox(scene, config, i, j, p, state));
           break;
         case "D":
-          promises.push(createDoor(scene, config, i, j, p, state));
+          promises.push(createDoor(scene, config, i, j, p, state, false));
+          break;
+        case "d":
+          promises.push(createDoor(scene, config, i, j, p, state, true));
           break;
         case "K":
           promises.push(createKey(scene, config, i, j, p, state));
