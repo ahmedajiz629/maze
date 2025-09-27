@@ -68,7 +68,7 @@ class GridPuzzle3D {
 
   constructor(
     protected readonly MAP: string[],
-    protected readonly TIME_MS = 10000, // button effect duration 
+    protected readonly TIME_MS = 5000, // button effect duration 
   ) {
     this.W = this.MAP[0].length;
     this.H = this.MAP.length;
@@ -273,7 +273,7 @@ class GridPuzzle3D {
         button.toggled = true;
 
         // Animate button press - find mesh with $ suffix and move it down
-        await this.animateButtonPress(button.mesh);
+        await this.animateButtonPress(button);
 
         return "Button activated!";
       } else if (button.toggled) {
@@ -348,9 +348,9 @@ class GridPuzzle3D {
     }
   }
 
-  private async animateButtonPress(buttonMesh: AbstractMesh): Promise<void> {
+  private async animateButtonPress(button: { mesh: AbstractMesh, direction: number, toggled: boolean }): Promise<void> {
     // Find the inner mesh (the actual button model) with $ suffix
-    const buttonGroup = buttonMesh as Mesh;
+    const buttonGroup = button.mesh as Mesh;
     const innerButtonMesh = buttonGroup.getChildMeshes().find(mesh => mesh.name.endsWith('$'));
 
     if (innerButtonMesh) {
@@ -389,7 +389,8 @@ class GridPuzzle3D {
       setTimeout(async () => {
         // Close all auto doors
         await this.closeAllAutoDoors();
-
+        button.toggled = false
+        
         // Reset timed lava to non-passable
         this.resetTimedLava();
 
@@ -522,6 +523,7 @@ class GridPuzzle3D {
             this.player.mesh.dispose();
             this.bannerElement.textContent = "You fell in lava.";
             this.bannerElement.style.display = 'block';
+            setTimeout(()=>{this.bannerElement.style.display = 'none'}, 2000)
           }
         }
       }
@@ -713,7 +715,7 @@ class GridPuzzle3D {
     // Show win message after a delay
 
     await new Promise(resolve => setTimeout(resolve, 1000));
-    return "🎉 You win! Good job. 🎉";
+    return `🎉 You win! Good job. 🎉\n${Date()}`;
   }
 
   private enhanceExitGlow(exitGroup: AbstractMesh): void {

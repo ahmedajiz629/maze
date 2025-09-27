@@ -108,7 +108,7 @@ export class PythonREPL {
       } else if (!level) methodResult = 'Unknown Level'
       else {
         this.level = l
-        const data = level
+        const data = level()
         if (this.gameController) {
           this.gameController.dispose()
         }
