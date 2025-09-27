@@ -285,12 +285,11 @@ class GridPuzzle3D {
 
       if (directionMatch && !button.toggled) {
         // Toggle the button
-        button.toggled = true;
-
-        // Animate button press - find mesh with $ suffix and move it down
-        await this.animateButtonPress(button);
-
-        return "Button activated!";
+        for(const b of this.buttons.values()) {
+          b.toggled = true;
+        }
+        Promise.all([...this.buttons.values()].map(b => this.animateButtonPress(b)));
+        return
       } else if (button.toggled) {
         return "Button already activated.";
       } else {
@@ -405,7 +404,6 @@ class GridPuzzle3D {
       setTimeout(async () => {
         // Close all auto doors
         await this.closeAllAutoDoors();
-        button.toggled = false
 
         // Reset timed lava to non-passable
         this.resetTimedLava();
@@ -413,11 +411,7 @@ class GridPuzzle3D {
         // Reset button position
         await this.resetButtonPosition(innerButtonMesh, startX);
 
-        // Reset button toggle state
-        const currentKey = parts.keyOf(this.player.x, this.player.y);
-        if (this.buttons.has(currentKey)) {
-          this.buttons.get(currentKey)!.toggled = false;
-        }
+        button.toggled = false
       }, this.TIME_MS);
     }
   }
