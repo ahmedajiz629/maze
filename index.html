@@ -120,19 +120,32 @@
       padding: 12px;
       overflow-y: auto;
       white-space: pre-wrap;
+      outline: none;
+      cursor: text;
+      line-height: 1.4;
     }
     
-    .python-input {
-      background: #2d2d30;
-      border: none;
-      color: #d4d4d4;
-      font-family: 'Consolas', 'Monaco', monospace;
-      font-size: 14px;
-      padding: 12px;
-      outline: none;
-      resize: none;
-      min-height: 40px;
-      border-top: 1px solid #444;
+    .python-console:focus {
+      background: #1e1e1e;
+    }
+    
+    .current-line {
+      display: inline;
+    }
+    
+    .cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1.2em;
+      background: #d4d4d4;
+      animation: blink 1s infinite;
+      vertical-align: top;
+      margin-left: 1px;
+    }
+    
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
     }
     
     #c {
@@ -167,7 +180,7 @@
     
     <div class="python-panel">
       <div class="python-header">Python REPL - Game Controller</div>
-      <div class="python-console" id="python-console">
+      <div class="python-console" id="python-console" tabindex="0">
 Python 3.11.0 (WebAssembly) - Loading...
 >>> # Available commands (when ready):
 >>> # step() - Move forward
@@ -178,7 +191,6 @@ Python 3.11.0 (WebAssembly) - Loading...
 >>> # sleep(seconds) - Wait
 >>> 
       </div>
-      <textarea id="python-input" class="python-input" placeholder="Enter Python commands here..." rows="3"></textarea>
     </div>
   </div>
 
