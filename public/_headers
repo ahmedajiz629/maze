@@ -15,6 +15,12 @@
   Content-Type: application/wasm
   Cross-Origin-Resource-Policy: cross-origin
 
+*.mjs
+  Content-Type: application/javascript
+
+/assets/*.js
+  Content-Type: application/javascript
+
 *.py
   Content-Type: text/plain
   Cross-Origin-Resource-Policy: cross-origin

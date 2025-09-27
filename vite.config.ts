@@ -6,11 +6,14 @@ export default defineConfig({
     assetsDir: 'assets',
     rollupOptions: {
       output: {
+        format: 'es',
         manualChunks: {
           babylon: ['@babylonjs/core', '@babylonjs/loaders'],
         }
       }
-    }
+    },
+    target: 'esnext',
+    minify: 'esbuild'
   },
   server: {
     port: 8080,

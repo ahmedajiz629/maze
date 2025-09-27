@@ -1,9 +1,10 @@
 [build]
   publish = "dist"
-  command = "npm run build"
+  command = "npm ci && npm run build"
 
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "20.11.0"
+  NPM_FLAGS = "--prefix=/opt/buildhome/.netlify_build"
 
 [[headers]]
   for = "/*"
@@ -38,6 +39,28 @@
   [headers.values]
     Content-Type = "application/wasm"
     Cross-Origin-Resource-Policy = "cross-origin"
+
+# Handle JavaScript modules properly
+[[headers]]
+  for = "*.mjs"
+  [headers.values]
+    Content-Type = "application/javascript"
+
+[[headers]]
+  for = "/assets/*.js"
+  [headers.values]
+    Content-Type = "application/javascript"
+
+# Additional file type headers
+[[headers]]
+  for = "*.json"
+  [headers.values]
+    Content-Type = "application/json"
+
+[[headers]]
+  for = "*.data"
+  [headers.values]
+    Content-Type = "application/octet-stream"
 
 # Ensure Python files are served correctly
 [[headers]]
