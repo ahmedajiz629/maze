@@ -661,3 +661,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }, CONFIG.GAME_CONTROLLER_INIT_DELAY);
 });
+
+export type { GridPuzzle3D };

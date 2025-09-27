@@ -1,98 +1,111 @@
 // Web Worker for running Python code with Pyodide
 let pyodide = null;
 let gameControllerReady = false;
+let sharedBuffer = null;
+let sharedData = null;
+let messageIdCounter = 0;
 
-// Helper function to call game methods via message passing (synchronous blocking)
-function callGameMethodSync(method, ...args) {
-  const messageId = Math.random().toString(36).substr(2, 9);
-  let result = null;
-  let completed = false;
-  let error = null;
-  
-  // Set up listener for response
-  const responseHandler = (e) => {
-    if (e.data.type === 'gameMethodResult' && e.data.messageId === messageId) {
-      self.removeEventListener('message', responseHandler);
-      if (e.data.error) {
-        error = e.data.error;
-      } else {
-        result = e.data.result;
-      }
-      completed = true;
-    }
+// SharedArrayBuffer layout:
+// [0] = messageId (for correlation)
+// [1] = method (1=step, 2=left, 3=right, 4=toggle)
+// [2-4] = args (reserved for future use)
+// [5] = result (0=success, -1=error)
+// [6] = ready flag (0=not ready, 1=ready)
+
+// Helper function to call game methods synchronously via SharedArrayBuffer
+function callGameMethodSync(methodName) {
+  if (!sharedData) {
+    throw new Error("SharedArrayBuffer not initialized");
+  }
+
+  // Map method names to numbers
+  const methodMap = {
+    'step': 1,
+    'left': 2,
+    'right': 3,
+    'toggle': 4
   };
+
+  const methodId = methodMap[methodName];
+  if (!methodId) {
+    throw new Error(`Unknown method: ${methodName}`);
+  }
+
+  // Generate unique message ID
+  messageIdCounter = (messageIdCounter + 1) % 1000000;
   
-  self.addEventListener('message', responseHandler);
+  // Reset ready flag
+  Atomics.store(sharedData, 6, 0);
   
-  // Send request to main thread
+  // Write request to shared memory
+  Atomics.store(sharedData, 0, messageIdCounter); // messageId
+  Atomics.store(sharedData, 1, methodId); // method
+  
+  // Notify main thread
   postMessage({
-    type: 'callGameMethod',
-    messageId,
-    method,
-    args
+    type: "gameMethodSync",
+    messageId: messageIdCounter
   });
-  
-  // Busy wait until response (synchronous blocking)
-  while (!completed) {
-    // Small delay to prevent excessive CPU usage
-    const start = Date.now();
-    while (Date.now() - start < 10) {
-      // Busy wait for 10ms
-    }
+
+  // Active wait on shared memory
+  while (Atomics.load(sharedData, 6) === 0) {
+    // Busy wait - will be unblocked when main thread sets ready flag
+    // This is intentionally blocking to make Python code synchronous
   }
+
+  // Read result
+  const result = Atomics.load(sharedData, 5);
   
-  if (error) {
-    throw new Error(error);
+  if (result !== 0) {
+    throw new Error(`Game method failed: ${result}`);
   }
-  
+
   return result;
 }
 
 // Load Pyodide in the worker
 async function initPyodide() {
   try {
-    importScripts('https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js');
+    importScripts("https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js");
     pyodide = await loadPyodide();
-    
+
     // Make the game method caller available globally
     pyodide.globals.set("callGameMethodSync", callGameMethodSync);
-    
-    // Define Python functions that call game methods
+
+
+
+    // Define Python functions that call game methods synchronously
     await pyodide.runPython(`
 import time
-from pyodide.ffi import create_proxy
 
+# Simple synchronous functions using SharedArrayBuffer communication
 def step():
     """Move player forward"""
-    if gameControllerReady:
-        return callGameMethodSync('moveForward')
-    else:
+    if not gameControllerReady:
         print("Game not ready yet")
         return None
+    return callGameMethodSync('step')
 
 def left():
     """Turn player left"""
-    if gameControllerReady:
-        return callGameMethodSync('turnLeft')
-    else:
+    if not gameControllerReady:
         print("Game not ready yet")
         return None
+    return callGameMethodSync('left')
 
 def right():
     """Turn player right"""
-    if gameControllerReady:
-        return callGameMethodSync('turnRight')
-    else:
+    if not gameControllerReady:
         print("Game not ready yet")
         return None
+    return callGameMethodSync('right')
 
 def toggle():
     """Use/interact with items"""
-    if gameControllerReady:
-        return callGameMethodSync('useAction')
-    else:
+    if not gameControllerReady:
         print("Game not ready yet")
         return None
+    return callGameMethodSync('toggle')
 
 def sleep(seconds):
     """Sleep function that works in web worker"""
@@ -101,37 +114,53 @@ def sleep(seconds):
 
 print("Game controller functions ready!")
 print("Available commands: step(), left(), right(), toggle(), sleep()")
-print("Note: These functions are blocking/synchronous and return actual values!")
+print("These functions are truly synchronous - no await needed!")
     `);
-    
-    postMessage({ type: 'ready', message: 'Pyodide initialized! Game controller ready.\n' });
+
+    postMessage({
+      type: "ready",
+      message: "Pyodide initialized! Game controller ready.\n",
+    });
   } catch (error) {
-    postMessage({ type: 'error', message: `Failed to load Pyodide: ${error.message}\n` });
+    postMessage({
+      type: "error",
+      message: `Failed to load Pyodide: ${error.message}\n`,
+    });
   }
 }
 
 // Handle messages from main thread
-onmessage = async function(e) {
+onmessage = async function (e) {
   const { type, data } = e.data;
-  
+  console.log("Worker received message:", e.data);
+
   switch (type) {
-    case 'init':
+    case "init":
       await initPyodide();
       break;
-      
-    case 'setGameController':
+
+    case "setSharedBuffer":
+      sharedBuffer = e.data.sharedBuffer;
+      sharedData = new Int32Array(sharedBuffer);
+      console.log("SharedArrayBuffer initialized in worker");
+      break;
+
+    case "setGameController":
       gameControllerReady = true;
       if (pyodide) {
         pyodide.globals.set("gameControllerReady", gameControllerReady);
       }
       break;
-      
-    case 'runCode':
+
+    case "runCode":
       if (!pyodide) {
-        postMessage({ type: 'error', message: 'Pyodide not loaded yet. Please wait...\n' });
+        postMessage({
+          type: "error",
+          message: "Pyodide not loaded yet. Please wait...\n",
+        });
         return;
       }
-      
+
       try {
         // Capture stdout
         pyodide.runPython(`
@@ -140,44 +169,34 @@ from io import StringIO
 old_stdout = sys.stdout
 sys.stdout = StringIO()
         `);
-        
+
         const code = data.code;
         let result;
-        
-        // Check if the code contains explicit await expressions (but not our game functions)
-        if (code.includes('await') && !code.match(/^(step|left|right|toggle|sleep)\(\)$/)) {
-          // Only wrap in async if there are explicit await calls
-          const asyncCode = `
-async def _temp_async_func():
-${code.split('\n').map(line => '    ' + line).join('\n')}
-    
-import asyncio
-result = await _temp_async_func()
-result
-          `;
-          result = await pyodide.runPythonAsync(asyncCode);
-        } else {
-          // Run synchronous code - this includes our game functions
-          result = pyodide.runPython(code);
-        }
-        
+
+
+        // Always try async first (works for both sync and async code in Pyodide)
+        console.log('Executing code:', code);
+        const p = pyodide.runPythonAsync(code);
+        console.log('Code running:', code);
+        result = await p
+
         // Get stdout output
         const output = pyodide.runPython(`
 output = sys.stdout.getvalue()
 sys.stdout = old_stdout
 output
         `);
-        
-        postMessage({ 
-          type: 'result', 
-          data: { 
-            output: output || '', 
-            result: result !== undefined && result !== null ? String(result) : null 
-          } 
+
+        postMessage({
+          type: "result",
+          data: {
+            output: output || "",
+            result:
+              result !== undefined && result !== null ? String(result) : null,
+          },
         });
-        
       } catch (error) {
-        postMessage({ type: 'error', message: `Error: ${error.message}\n` });
+        postMessage({ type: "error", message: `Error: ${error.message}\n` });
       }
       break;
   }
