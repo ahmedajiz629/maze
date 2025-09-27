@@ -111,7 +111,7 @@ export class PythonREPL {
     }
     if (method === 'level') {
       let l = args[0] as undefined | string
-      if (l === '$') l = this.level ?? Object.keys('levels')[0]
+      if (l === '$') l = this.level ?? Object.keys(levels)[0]
       const level = l && levels[l]
       if (typeof l !== 'string') {
         methodResult = 'Please select a level first'
