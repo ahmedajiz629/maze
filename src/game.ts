@@ -355,6 +355,7 @@ class GridPuzzle3D {
           innerDoorMesh.rotation.y = startRotation + (targetRotation - startRotation) * easedProgress;
 
           if (progress >= 1) {
+            innerDoorMesh.rotation.y = targetRotation;
             this.scene.onBeforeRenderObservable.remove(observer);
             resolve();
           }
@@ -435,6 +436,13 @@ class GridPuzzle3D {
     await Promise.all(openPromises);
   }
 
+  private bye(message: string): void {
+      this.player.mesh.dispose();
+      this.bannerElement.textContent = message;
+      this.bannerElement.style.display = 'block';
+      setTimeout(() => { this.bannerElement.style.display = 'none' }, 2000)
+  }
+
   private async closeAllAutoDoors(): Promise<void> {
     const closePromises: Promise<void>[] = [];
 
@@ -444,6 +452,10 @@ class GridPuzzle3D {
 
       // Animate door closing
       closePromises.push(this.closeDoorAsync(doorMesh));
+    }
+    const playerKey = parts.keyOf(this.player.x, this.player.y);
+    if (this.blocked.has(playerKey)) {
+      this.bye("You got crushed by the door.");
     }
 
     await Promise.all(closePromises);
@@ -540,10 +552,7 @@ class GridPuzzle3D {
     if (!lavaData) return
     if (!lavaData.isPassable) {
       // Player is standing on lava that just became deadly
-      this.player.mesh.dispose();
-      this.bannerElement.textContent = "You fell in lava.";
-      this.bannerElement.style.display = 'block';
-      setTimeout(() => { this.bannerElement.style.display = 'none' }, 2000)
+      this.bye("You fell in lava.");
     }
   }
 

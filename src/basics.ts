@@ -6,6 +6,14 @@ export const levels: Record<string, () => { MAP: string[], TIME_MS?: number }> =
       "##########",
     ]
   }),
+  funny: () => ({
+    MAP: [
+      "######",
+      "###Sy#",
+      "#Ea..#",
+      "######",
+    ]
+  }),
   box: () => ({
     MAP: [
       "##########",
