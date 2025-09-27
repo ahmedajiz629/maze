@@ -34,17 +34,50 @@ A 3D maze game built with Ursina Engine featuring lava, walls, keys, movable box
 - **H**: Show help in console
 - **ESC**: Quit game
 
-## Installation
+## Installation & Development
 
-1. Install required packages:
+### Local Development
+
+1. Install dependencies:
    ```bash
-   pip install -r requirements.txt
+   npm install
    ```
 
-2. Run the game:
+2. Run development server:
    ```bash
-   python maze_game.py
+   npm run dev
    ```
+
+3. Build for production:
+   ```bash
+   npm run build
+   ```
+
+### Netlify Deployment
+
+This project is ready for Netlify deployment with:
+
+1. **Automatic deployment**: Connect your Git repository to Netlify
+2. **Build configuration**: Uses `npm run build` command automatically
+3. **Headers**: Cross-Origin headers configured for SharedArrayBuffer support
+4. **Redirects**: Client-side routing support configured
+
+#### Manual Deployment
+
+1. Build the project:
+   ```bash
+   npm run build
+   ```
+
+2. Deploy the `dist` folder to Netlify
+
+#### Environment Setup
+
+The project includes:
+- `netlify.toml` - Main Netlify configuration
+- `public/_headers` - HTTP headers configuration
+- `public/_redirects` - Client-side routing redirects
+- Cross-Origin headers for SharedArrayBuffer support
 
 ## Game Objective
 

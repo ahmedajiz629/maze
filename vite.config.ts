@@ -1,19 +1,14 @@
 import { defineConfig } from 'vite';
-import { resolve } from 'path';
 
 export default defineConfig({
   build: {
-    lib: {
-      entry: resolve(__dirname, 'src/game.ts'),
-      name: 'GridPuzzle3D',
-      fileName: 'game',
-      formats: ['es']
-    },
     outDir: 'dist',
+    assetsDir: 'assets',
     rollupOptions: {
-      external: [],
       output: {
-        globals: {}
+        manualChunks: {
+          babylon: ['@babylonjs/core', '@babylonjs/loaders'],
+        }
       }
     }
   },

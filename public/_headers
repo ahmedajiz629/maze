@@ -1,0 +1,20 @@
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+
+/assets/*
+  Cache-Control: max-age=31536000
+
+*.js
+  Cache-Control: max-age=31536000
+
+*.css
+  Cache-Control: max-age=31536000
+
+*.wasm
+  Content-Type: application/wasm
+  Cross-Origin-Resource-Policy: cross-origin
+
+*.py
+  Content-Type: text/plain
+  Cross-Origin-Resource-Policy: cross-origin
