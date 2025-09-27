@@ -4,7 +4,7 @@ import { createBox, createDoor, createKey, createLava, createWall } from "./unit
 import { createExit } from "./units/exit";
 
 export const initMap = async (scene: Scene, config: { MAP: string[], WALL_H: number, TILE: number },
-  units: { wallUnit: Mesh, boxUnit: Mesh },
+  units: { wallUnit: Mesh },
   state: {
     blocked: Set<string>,
     boxes: Map<string, AbstractMesh>,
@@ -18,8 +18,7 @@ export const initMap = async (scene: Scene, config: { MAP: string[], WALL_H: num
   let exitCell: { x: number; y: number } | false = false;
   let spawnCell: { x: number; y: number } | false = false;
 
-  const keyPromises: Promise<void>[] = [];
-  const doorPromises: Promise<void>[] = [];
+  const promises: Promise<void>[] = [];
 
   for (let j = 0; j < H; j++) {
     for (let i = 0; i < W; i++) {
@@ -31,13 +30,13 @@ export const initMap = async (scene: Scene, config: { MAP: string[], WALL_H: num
           createWall(config, i, j, p, units, state);
           break;
         case "B":
-          createBox(config, i, j, p, units, state);
+          promises.push(createBox(scene, config, i, j, p, state));
           break;
         case "D":
-          doorPromises.push(createDoor(scene, config, i, j, p, state));
+          promises.push(createDoor(scene, config, i, j, p, state));
           break;
         case "K":
-          keyPromises.push(createKey(scene, config, i, j, p, state));
+          promises.push(createKey(scene, config, i, j, p, state));
           break;
         case "~":
           createLava(scene, config, i, j, p, state);
@@ -54,7 +53,7 @@ export const initMap = async (scene: Scene, config: { MAP: string[], WALL_H: num
   }
 
   // Wait for all keys and doors to load
-  await Promise.all([...keyPromises, ...doorPromises]);
+  await Promise.all(promises);
 
   if (!spawnCell || !exitCell) {
     throw new Error("Map must include S (spawn) and E (exit).");

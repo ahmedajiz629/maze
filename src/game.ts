@@ -32,7 +32,7 @@ interface Player {
 class GridPuzzle3D {
   private readonly MAP = [
     "...#################",
-    ".S.K..#...........E#",
+    ".S.KB.#...........E#",
     "#~##.#.#####.#######",
     "#~...#.....#.......#",
     "###.###.#.#.###.#..#",
@@ -84,7 +84,6 @@ class GridPuzzle3D {
 
   // Mesh templates
   private wallUnit!: Mesh;
-  private boxUnit!: Mesh;
 
   constructor() {
     this.W = this.MAP[0].length;
@@ -106,10 +105,11 @@ class GridPuzzle3D {
   }
 
   private async initializeGameAsync(): Promise<void> {
+    // Initialize geometry first (this loads the box model)
+    
     // Initialize the map (this will load all keys)
     const cells = await parts.initMap(this.scene, { MAP: this.MAP, WALL_H: this.WALL_H, TILE: this.TILE }, {
       wallUnit: this.wallUnit,
-      boxUnit: this.boxUnit
     }, {
       blocked: this.blocked,
       boxes: this.boxes,
@@ -155,8 +155,6 @@ class GridPuzzle3D {
     parts.prepareGround(this.scene, { W: this.W, H: this.H, TILE: this.TILE });
     // Create unit meshes for instancing
     this.wallUnit = parts.makeWallUnit(this.scene, { TILE: this.TILE, WALL_H: this.WALL_H });
-    this.boxUnit = parts.makeBox(this.scene, { TILE: this.TILE });
-
 
   }
 
@@ -360,7 +358,7 @@ class GridPuzzle3D {
             this.tweenPosition(
               box,
               this.cellToWorld(bx, by, -this.TILE / 2 + .1), // Fall below ground level
-              this.PUSH_MS * 2, // Slower fall animation
+              this.PUSH_MS / 2
             );
           }
         );
