@@ -6,7 +6,7 @@ export const levels: Record<string, () => { MAP: string[], TIME_MS?: number }> =
       "##########",
     ]
   }),
-  funny: () => ({
+  speed: () => ({
     MAP: [
       "######",
       "###Sy#",
