@@ -69,6 +69,7 @@ class GridPuzzle3D {
   constructor(
     protected readonly MAP: string[],
     protected readonly TIME_MS = 5000, // button effect duration 
+    protected readonly ROTATION = 0 // initial player rotation in radians
   ) {
     this.W = this.MAP[0].length;
     this.H = this.MAP.length;
@@ -125,9 +126,9 @@ class GridPuzzle3D {
       keys: 0,
       mesh: await parts.makePlayer(this.scene),
       moving: false,
-      rotation: 0 // Start facing right (0 radians)
+      rotation: this.ROTATION // Start facing right (0 radians)
     };
-
+    this.player.mesh.rotation.y = -this.ROTATION;
 
     // Update camera target
     this.camera.setTarget(this.player.mesh.position);
@@ -168,13 +169,16 @@ class GridPuzzle3D {
     });
   }
 
-  public async run(action: 'step' | 'toggle' | 'left' | 'right' | 'safe') {
+  public async run(action: 'step' | 'toggle' | 'left' | 'right' | 'safe' | 'unDone') {
+    if (action === 'unDone') {
+      return !this.player.won && !this.player.mesh.isDisposed();
+    }
     const actions = {
       step: "moveForward",
       toggle: 'useAction',
       left: 'turnLeft',
       right: 'turnRight',
-      safe: 'safe'
+      safe: 'safe',
     } as const
     if (this.player.won) {
       return "Press restart() to restart or level(leval_name) to choose another level"
@@ -285,7 +289,7 @@ class GridPuzzle3D {
 
       if (directionMatch && !button.toggled) {
         // Toggle the button
-        for(const b of this.buttons.values()) {
+        for (const b of this.buttons.values()) {
           b.toggled = true;
         }
         Promise.all([...this.buttons.values()].map(b => this.animateButtonPress(b)));
@@ -431,10 +435,10 @@ class GridPuzzle3D {
   }
 
   private bye(message: string): void {
-      this.player.mesh.dispose();
-      this.bannerElement.textContent = message;
-      this.bannerElement.style.display = 'block';
-      setTimeout(() => { this.bannerElement.style.display = 'none' }, 2000)
+    this.player.mesh.dispose();
+    this.bannerElement.textContent = message;
+    this.bannerElement.style.display = 'block';
+    setTimeout(() => { this.bannerElement.style.display = 'none' }, 2000)
   }
 
   private async closeAllAutoDoors(): Promise<void> {

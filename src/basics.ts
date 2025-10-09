@@ -1,4 +1,6 @@
-export const levels: Record<string, () => { MAP: string[], TIME_MS?: number }> = {
+import { Levels } from "./level"
+
+export const levels: Levels = {
   intro: () => ({
     MAP: [
       "##########",

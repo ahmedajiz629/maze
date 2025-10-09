@@ -1,0 +1,1 @@
+export type Levels = Record<string, () => { MAP: string[], TIME_MS?: number, ROTATION?: number }>;

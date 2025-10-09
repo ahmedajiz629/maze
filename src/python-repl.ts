@@ -1,7 +1,6 @@
 // Python REPL controller - handles communication between UI and Python Worker
 import { CONFIG } from './config';
 import { GridPuzzle3D } from './game';
-import { levels } from './basics'
 
 export class PythonREPL {
   private pythonWorker: Worker | null = null;
@@ -94,23 +93,39 @@ export class PythonREPL {
       this.updateConsole("Failed to create Python Worker: " + (error as Error).message + "\n");
     }
   }
+  get levels() {
+    return localStorage.getItem('levels')
+  }
+  set levels(levels) {
+    localStorage.setItem('levels', levels!)
+  }
   get level() {
     return localStorage.getItem('level')
   }
   set level(level) {
-    localStorage.setItem('level', level!)
+    if (level)
+      localStorage.setItem('level', level)
+    else localStorage.removeItem('level')
   }
-  private async handleSyncGameMethod(method: 'step' | 'left' | 'right' | 'toggle' | 'safe' | 'level' | 'restart', args: unknown[]): Promise<void> {
+  private async handleSyncGameMethod(method: 'step' | 'left' | 'right' | 'toggle' | 'safe' | 'unDone' | 'level' | 'levels' | 'restart', args: unknown[]): Promise<void> {
     if (!this.sharedData) return;
 
     // Read method from shared memory  
     let methodResult: unknown;
+    if (method === 'levels') {
+      this.levels = args[0] as string
+      method = 'level'
+      args = ['$']
+      this.level = null
+    }
     if (method === 'restart') {
       method = 'level'
       args = [this.level]
     }
     if (method === 'level') {
       let l = args[0] as undefined | string
+      const levelsStr = this.levels ?? 'basics'
+      const { levels } = await { [levelsStr]: () => import('./basics'), blockly: () => import('./blockly') }[levelsStr]()
       if (l === '$') l = this.level ?? Object.keys(levels)[0]
       const level = l && levels[l]
       if (typeof l !== 'string') {
@@ -122,12 +137,12 @@ export class PythonREPL {
         if (this.gameController) {
           this.gameController.dispose()
         }
-        this.gameController = new GridPuzzle3D(data.MAP, data.TIME_MS)
+        this.gameController = new GridPuzzle3D(data.MAP, data.TIME_MS, data.ROTATION);
         await this.gameController.initializeGameAsync()
         methodResult = '$$'
       }
     } else if (!this.gameController) {
-      methodResult = "Please select a level, ex basic"
+      methodResult = "Please select a level, ex intro"
     } else {
 
       methodResult = await this.gameController.run(method)

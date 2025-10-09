@@ -78,9 +78,17 @@ def safe():
     """Check if the next position is safe"""
     return callGameMethodSync('safe')
 
+def unDone():
+    """Check if the game is not done"""
+    return callGameMethodSync('unDone')
+
 def level(name):
     """Change level"""
     return callGameMethodSync('level', name)
+
+def levels(name):
+    """Change levels"""
+    return callGameMethodSync('levels', name)
 
 def restart():
     """Change level"""
