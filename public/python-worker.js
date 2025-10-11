@@ -180,14 +180,13 @@ sys.stdout = RealtimeStringIO()
 
         // Always try async first (works for both sync and async code in Pyodide)
         console.log("Executing code:", code);
-        const p = pyodide.runPythonAsync(code);
+        result = pyodide.runPython(code);
         //   `try:\n${code
         //     .split("\n")
         //     .map((x) => ` ${x}`)
         //     .join("\n")}\n except JsException as e: print(str(e))`
         // );
         console.log("Code running:", code);
-        result = await p;
         const match = /def\s+(\w+)\s*\(.*\):/.exec(code);
         pyodide.globals.set("_", result);
         if (match) {

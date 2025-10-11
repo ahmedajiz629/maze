@@ -10,6 +10,12 @@ interface PythonConsoleProps {
 
 }
 
+interface ConsoleEntry {
+  type: 'system' | 'input' | 'output' | 'error';
+  text: string;
+  color: string;
+}
+
 const PythonConsole: React.FC<PythonConsoleProps> = ({
   onReady,
   onOutput,
@@ -21,7 +27,9 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const consoleContainerRef = useRef<HTMLDivElement>(null);
   const [isReady, setIsReady] = useState(false);
-  const [consoleOutput, setConsoleOutput] = useState('Python 3.11.0 (WebAssembly) - Loading...\n');
+  const [consoleEntries, setConsoleEntries] = useState<ConsoleEntry[]>([
+    { type: 'system', text: 'Python 3.11.0 (WebAssembly) - Loading...', color: '#FFC107' }
+  ]);
   const [inputValue, setInputValue] = useState('');
 
   const scrollToBottom = useCallback(() => {
@@ -33,23 +41,32 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
     }
   }, []);
 
-  const updateConsole = useCallback((text: string): void => {
-    setConsoleOutput(prev => prev + text);
-    onOutput(text);
+  const addConsoleEntry = useCallback((entry: ConsoleEntry): void => {
+    setConsoleEntries(prev => [...prev, entry]);
+    if (entry.type === 'output') {
+      onOutput(entry.text);
+    } else if (entry.type === 'error') {
+      onError(entry.text);
+    }
     // Scroll to bottom after updating console output
     setTimeout(scrollToBottom, 0);
-  }, [onOutput, scrollToBottom]);
+  }, [onOutput, onError, scrollToBottom]);
+
+  const updateConsole = useCallback((text: string): void => {
+    addConsoleEntry({ type: 'output', text, color: '#d4d4d4' });
+  }, [addConsoleEntry]);
 
   const executeCode = useCallback((code: string): void => {
+    console.log({code})
     if (pythonReplRef.current && code.trim()) {
-      // Add the input to console output
-      setConsoleOutput(prev => prev + '>>> ' + code + '\n');
+      // Add the input to console entries
+      addConsoleEntry({ type: 'input', text: `${code}`, color: '#4CAF50' });
       // Execute the code
       pythonReplRef.current.executeCode(code);
       // Clear the input
       setInputValue('');
     }
-  }, []);
+  }, [addConsoleEntry]);
 
   const handleInputChange = useCallback(async (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
@@ -93,8 +110,7 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
 
     const handlers = {
       onError: (error: string) => {
-        updateConsole(error + '\n');
-        onError(error);
+        addConsoleEntry({ type: 'error', text: error, color: '#f44336' });
       },
       onOutput: updateConsole,
       onReady: () => {
@@ -114,20 +130,26 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
         pythonReplRef.current = null;
       }
     };
-  }, [updateConsole, onReady, onError, canvasRef, services]);
+  }, [addConsoleEntry, updateConsole, onReady, canvasRef, services]);
 
   // Update ready status
   useEffect(() => {
     if (isReady) {
-      setConsoleOutput(prev => prev.replace('Loading...', 'Ready! Type your Python code below and press Enter to execute.'));
+      setConsoleEntries(prev =>
+        prev.map(entry =>
+          entry.text.includes('Loading...')
+            ? { ...entry, text: 'Python 3.11.0 (WebAssembly) - Ready! Type your Python code below and press Enter to execute.', color: '#4CAF50' }
+            : entry
+        )
+      );
       setTimeout(scrollToBottom, 0);
     }
   }, [isReady, scrollToBottom]);
 
-  // Also scroll to bottom when console output changes
+  // Also scroll to bottom when console entries change
   useEffect(() => {
     scrollToBottom();
-  }, [consoleOutput, scrollToBottom]);
+  }, [consoleEntries, scrollToBottom]);
 
   // Calculate textarea height based on number of lines
   const calculateTextareaHeight = () => {
@@ -156,7 +178,11 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
       }}
     >
       <div style={{ whiteSpace: 'pre-wrap' }}>
-        {consoleOutput}
+        {consoleEntries.map((entry, index) => (
+          <span key={index} style={{ color: entry.color }} className={`console-${entry.type}`}>
+            {entry.text.split('\n').map((line, i, a) => (<span key={i}>{line}{i === a.length - 1 ? '' : '\n'}</span>))}
+          </span>
+        ))}
       </div>
       <div style={{ display: 'flex', alignItems: 'flex-start' }}>
         <span style={{ color: '#4CAF50', marginRight: '4px' }}>{'>>> '}</span>

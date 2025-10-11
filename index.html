@@ -52,6 +52,16 @@
         border-radius: 4px;
         border: 1px solid;
       }
+      .console-input {
+        display: block;
+      }
+      .console-input > ::before {
+        content: '... ';
+        margin-right: 4px;
+      }
+      .console-input > :first-child:before {
+        content: '>>> ';
+      }
 
       .key-color {
         width: 12px;
