@@ -153,10 +153,25 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
 
   const lines = useMemo(() => Math.max(1, inputValue.split('\n').length), [inputValue]);
 
+  // Focus textarea when clicking anywhere in the console
+  const handleConsoleClick = useCallback(() => {
+    if (textareaRef.current && isReady) {
+      textareaRef.current.focus();
+    }
+  }, [isReady]);
+
+  // Auto-focus textarea when ready
+  useEffect(() => {
+    if (isReady && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [isReady]);
+
   return (
     <div
       ref={consoleContainerRef}
       className="python-console"
+      onClick={handleConsoleClick}
       style={{
         backgroundColor: '#1e1e1e',
         color: '#d4d4d4',
@@ -168,6 +183,7 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
         border: '1px solid #444',
         outline: 'none',
         flex: 1,
+        cursor: 'text',
       }}
     >
       <div style={{ whiteSpace: 'pre-wrap' }}>
@@ -187,6 +203,7 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
           onChange={handleInputChange}
           placeholder={!isReady ? "Loading Python..." : ""}
           disabled={!isReady}
+          autoFocus={isReady}
           style={{
             backgroundColor: 'transparent',
             color: '#d4d4d4',
@@ -196,10 +213,9 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
             outline: 'none',
             resize: 'none',
             width: '100%',
-            height: `${lines * 20 + 20}px`,
+            height: `${lines * 17 + 20}px`,
             padding: '0',
             margin: '0',
-            lineHeight: '20px',
             overflow: 'hidden'
           }}
         />
