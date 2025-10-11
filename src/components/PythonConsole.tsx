@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { PythonREPL, Services } from '../python-repl';
 
 interface PythonConsoleProps {
@@ -151,14 +151,7 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
     scrollToBottom();
   }, [consoleEntries, scrollToBottom]);
 
-  // Calculate textarea height based on number of lines
-  const calculateTextareaHeight = () => {
-    const lines = inputValue.split('\n').length;
-    const lineHeight = 20; // Approximate line height in pixels
-    const padding = 20; // Top and bottom padding
-    const minHeight = lineHeight + padding; // At least one line
-    return Math.max(minHeight, lines * lineHeight + padding);
-  };
+  const lines = useMemo(() => Math.max(1, inputValue.split('\n').length), [inputValue]);
 
   return (
     <div
@@ -184,8 +177,10 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
           </span>
         ))}
       </div>
-      <div style={{ display: 'flex', alignItems: 'flex-start' }}>
-        <span style={{ color: '#4CAF50', marginRight: '4px' }}>{'>>> '}</span>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+        <div className='console-input'>
+          {Array.from({ length: lines }, (_, i) => <div key={i} />)}
+        </div>
         <textarea
           ref={textareaRef}
           value={inputValue}
@@ -201,7 +196,7 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
             outline: 'none',
             resize: 'none',
             width: '100%',
-            height: `${calculateTextareaHeight()}px`,
+            height: `${lines * 20 + 20}px`,
             padding: '0',
             margin: '0',
             lineHeight: '20px',

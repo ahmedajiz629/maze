@@ -73,6 +73,7 @@ import time
 
 import sys
 from io import StringIO
+old_stdout = sys.stdout
 
 class RealtimeStringIO(StringIO):
     def __init__(self):
@@ -169,9 +170,7 @@ onmessage = async function (e) {
       try {
         // Capture stdout
         pyodide.runPython(`
-import sys
 from io import StringIO
-old_stdout = sys.stdout
 sys.stdout = RealtimeStringIO()
         `);
 
@@ -224,7 +223,7 @@ output
       if (!pyodide) {
         postMessage({
           type: "completionCheck",
-          data: { requestId: data.requestId, status: "incomplete" }
+          data: { requestId: data.requestId, status: "incomplete" },
         });
         return;
       }
@@ -233,6 +232,7 @@ output
         // Import console module and check code completion using Python
         const result = pyodide.runPython(`
 import pyodide.console
+sys.stdout = old_stdout
 console = pyodide.console.Console()
 future = console.push(${JSON.stringify(data.code)})
 future.syntax_check
