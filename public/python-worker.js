@@ -6,39 +6,49 @@ let sharedData = null;
 
 // SharedArrayBuffer layout:
 // [0] = ready flag (0=not ready, 1=ready)
-// [1] = data length 
+// [1] = data length
 // [2...] = JSON data as UTF-16 char codes
 
 // Helper function to call game methods synchronously via SharedArrayBuffer
-function callGameMethodSync(method, ...args) {
-  
+function callGameMethodSync(method, print, ...args) {
   // Reset ready flag
   Atomics.store(sharedData, 0, 0);
-  
+
   // Notify main thread
   postMessage({
     type: "gameMethodSync",
-    data: {method,args}
+    data: { method, args },
   });
 
-  // Active wait on shared memory
-  while (Atomics.load(sharedData, 0) === 0) {
-    // Busy wait - will be unblocked when main thread sets ready flag
-  }
+  while (true) {
+    // Active wait on shared memory
+    while (Atomics.wait(sharedData, 0, 0) !== "not-equal") {
+      // Busy wait - will be unblocked when main thread sets ready flag
+    }
+    const status = Atomics.load(sharedData, 0);
+    // Read JSON result
+    const dataLength = Atomics.load(sharedData, 1);
+    let dataRead = "";
+    for (let i = 0; i < dataLength; i++) {
+      dataRead += String.fromCharCode(Atomics.load(sharedData, 2 + i));
+    }
 
-  // Read JSON result
-  const dataLength = Atomics.load(sharedData, 1);
-  let jsonString = '';
-  for (let i = 0; i < dataLength; i++) {
-    jsonString += String.fromCharCode(Atomics.load(sharedData, 2 + i));
+    if (status === 3) {
+      // print output
+      print(dataRead);
+      Atomics.store(sharedData, 0, 0);
+      postMessage({ type: "printed" });
+      continue;
+    }
+    const isError = status === 2;
+    if (isError) throw dataRead;
+    const response = JSON.parse(dataRead);
+    if (response === "$$") {
+      pyodide.globals.set("gameControllerReady", true);
+      return "Level loaded";
+    }
+    return response;
   }
-
-  const response =  JSON.parse(jsonString);
-  if(response === '$$') {
-    pyodide.globals.set("gameControllerReady", true);
-    return 'Level loaded'
-  }
-  return response
 }
 
 // Load Pyodide in the worker
@@ -48,14 +58,33 @@ async function initPyodide(predefined) {
     pyodide = await loadPyodide();
 
     // Make the game method caller available globally
-    pyodide.globals.set("callGameMethodSync", callGameMethodSync);
+    pyodide.globals.set("callGameMethod", callGameMethodSync);
     pyodide.globals.set("gameControllerReady", false);
-
-
+    pyodide.globals.set("sendOutput", (message) =>
+      postMessage({
+        type: "print",
+        message,
+      })
+    );
 
     // Define Python functions that call game methods synchronously
     await pyodide.runPython(`
 import time
+
+import sys
+from io import StringIO
+
+class RealtimeStringIO(StringIO):
+    def __init__(self):
+        super().__init__()
+    
+    def write(self, s):
+        # Send to JS immediately on each write
+        sendOutput(s)
+        return super().write(s)
+
+def callGameMethodSync(method, *args):
+    return callGameMethod(method, print, *args)
 
 # Simple synchronous functions using SharedArrayBuffer communication
 def step():
@@ -98,7 +127,9 @@ def sleep(seconds):
     """Sleep function that works in web worker"""
     import time
     time.sleep(seconds)
-${Object.entries(predefined).map(([k, v]) => `${v}\n${k}.code = ${JSON.stringify(v)}`).join('\n')}
+${Object.entries(predefined)
+  .map(([k, v]) => `${v}\n${k}.code = ${JSON.stringify(v)}`)
+  .join("\n")}
 level('$')
     `);
 
@@ -141,23 +172,27 @@ onmessage = async function (e) {
 import sys
 from io import StringIO
 old_stdout = sys.stdout
-sys.stdout = StringIO()
+sys.stdout = RealtimeStringIO()
         `);
 
         const code = data.code;
         let result;
 
-
         // Always try async first (works for both sync and async code in Pyodide)
-        console.log('Executing code:', code);
+        console.log("Executing code:", code);
         const p = pyodide.runPythonAsync(code);
-        console.log('Code running:', code);
-        result = await p
+        //   `try:\n${code
+        //     .split("\n")
+        //     .map((x) => ` ${x}`)
+        //     .join("\n")}\n except JsException as e: print(str(e))`
+        // );
+        console.log("Code running:", code);
+        result = await p;
         const match = /def\s+(\w+)\s*\(.*\):/.exec(code);
         pyodide.globals.set("_", result);
-        if(match) {
-            const k = match[1];
-            pyodide.runPython(`${k}.code = ${JSON.stringify(code)}`)
+        if (match) {
+          const k = match[1];
+          pyodide.runPython(`${k}.code = ${JSON.stringify(code)}`);
         }
 
         // Get stdout output
@@ -167,17 +202,22 @@ output = sys.stdout.getvalue()
 sys.stdout = old_stdout
 output
         `);
-        console.log({output})
+        console.log({ output });
 
         postMessage({
           type: "result",
           data: {
-            output: output || "",
-            add: match ? [match[1], code]: null
+            add: match ? [match[1], code] : null,
           },
         });
       } catch (error) {
-        postMessage({ type: "error", message: `Error: ${error.message}\n` });
+        postMessage({
+          type: "error",
+          message:
+            error.type === "JsException"
+              ? error.message.split("Error: ").at(-1)
+              : `Error: ${error.message}\n`,
+        });
       }
       break;
   }

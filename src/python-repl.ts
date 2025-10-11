@@ -1,6 +1,7 @@
 // Python REPL controller - handles communication between UI and Python Worker
 import { CONFIG } from './config';
 import { GridPuzzle3D } from './game';
+import { ActionName } from './level';
 
 export class PythonREPL {
   private pythonWorker: Worker | null = null;
@@ -8,8 +9,8 @@ export class PythonREPL {
   private consoleElement: HTMLElement;
   private loadingElement: HTMLElement;
 
-  private sharedBuffer?: SharedArrayBuffer;
-  private sharedData?: Int32Array;
+  private sharedBuffer = new SharedArrayBuffer(1024 * 4); // 1KB for JSON data
+  private sharedData = new Int32Array(this.sharedBuffer);
 
   // Console state
   private currentLine: string = '';
@@ -34,12 +35,20 @@ export class PythonREPL {
     try {
       // Create SharedArrayBuffer for synchronous communication
       // Structure: [0] = ready flag, [1] = data length, [2...] = JSON data as UTF-16 codes
-      this.sharedBuffer = new SharedArrayBuffer(1024 * 4); // 1KB for JSON data
-      this.sharedData = new Int32Array(this.sharedBuffer);
 
-      this.pythonWorker = new Worker(CONFIG.PYTHON_WORKER_URL);
+      const worker = this.pythonWorker = new Worker(CONFIG.PYTHON_WORKER_URL);
+      const waitReady = () => new Promise<void>((resolve) => {
+        const handleReady = (e: MessageEvent) => {
+          if (e.data.type === 'printed') {
+            worker.removeEventListener('message', handleReady);
+            resolve();
+          }
+        }
+        worker.addEventListener('message', handleReady);
+      })
 
-      this.pythonWorker.onmessage = async (e) => {
+      worker.onmessage = async (e) => {
+        console.log("Host received message:", e.data);
         const { type, message, data } = e.data;
 
         switch (type) {
@@ -51,12 +60,6 @@ export class PythonREPL {
             break;
 
           case 'result':
-            if (data.output) {
-              this.updateConsole(data.output);
-            }
-            if (data.result) {
-              this.updateConsole(data.result + '\n');
-            }
             if (data.add) {
               const [funcName, code] = data.add;
               self.localStorage.setItem(`py:${funcName}`, code);
@@ -68,22 +71,25 @@ export class PythonREPL {
             this.updateConsole(message);
             this.showPrompt();
             break;
+          case 'print':
+            this.updateConsole(message);
+            break;
 
           case 'gameMethodSync':
             // Handle synchronous game method calls from worker via SharedArrayBuffer
-            await this.handleSyncGameMethod(data.method, data.args);
+            await this.handleSyncGameMethod(data.method, data.args, waitReady);
             break;
 
         }
       };
 
-      this.pythonWorker.onerror = (error) => {
+      worker.onerror = (error) => {
         console.error("Python Worker error:", error);
         this.updateConsole("Python Worker error: " + error.message + "\n");
       };
 
       // Initialize Pyodide in the worker
-      this.pythonWorker.postMessage({
+      worker.postMessage({
         type: 'init', sharedBuffer: this.sharedBuffer,
         predefined: Object.fromEntries(Object.entries(localStorage).flatMap(([k, v]) => k.startsWith('py:') ? [[k.slice(3), v]] : []))
       });
@@ -107,11 +113,35 @@ export class PythonREPL {
       localStorage.setItem('level', level)
     else localStorage.removeItem('level')
   }
-  private async handleSyncGameMethod(method: 'step' | 'left' | 'right' | 'toggle' | 'safe' | 'unDone' | 'level' | 'levels' | 'restart', args: unknown[]): Promise<void> {
-    if (!this.sharedData) return;
+  private async handleSyncGameMethod(method: ActionName | 'level' | 'levels' | 'restart', args: unknown[], waitReady: () => Promise<void>): Promise<void> {
+    const sendData = (data: string, type: 'result' | 'error' | 'output') => {
+      if (!this.sharedData) throw new Error('Shared data not available');
+      // JSON stringify the result and write to shared buffer
+      const dataLength = data.length;
+
+      // Write length at position 1
+      Atomics.store(this.sharedData, 1, dataLength);
+
+      // Write JSON data starting at position 2
+      for (let i = 0; i < dataLength; i++) {
+        Atomics.store(this.sharedData, 2 + i, data.charCodeAt(i));
+      }
+
+      // Set ready flag last
+      Atomics.store(this.sharedData, 0, { result: 1, error: 2, output: 3 }[type]);
+      Atomics.notify(this.sharedData, 0);
+    }
+
+    const print = (output: string) => {
+      sendData(output, 'output')
+      return waitReady()
+    }
+    const sendResult = (methodResult: unknown) => {
+      const jsonData = JSON.stringify(methodResult ?? null);
+      sendData(jsonData, 'result')
+    }
 
     // Read method from shared memory  
-    let methodResult: unknown;
     if (method === 'levels') {
       this.levels = args[0] as string
       method = 'level'
@@ -129,43 +159,36 @@ export class PythonREPL {
       if (l === '$') l = this.level ?? Object.keys(levels)[0]
       const level = l && levels[l]
       if (typeof l !== 'string') {
-        methodResult = 'Please select a level first'
-      } else if (!level) methodResult = 'Unknown Level'
-      else {
-        this.level = l
-        const data = level()
-        if (this.gameController) {
-          this.gameController.dispose()
-        }
-        this.gameController = new GridPuzzle3D(data.MAP, data.TIME_MS, data.ROTATION);
-        await this.gameController.initializeGameAsync()
-        methodResult = '$$'
+        return sendData('Please select a level first', 'error')
       }
-    } else if (!this.gameController) {
-      methodResult = "Please select a level, ex intro"
-    } else {
+      if (!level) return sendData('Unknown Level', 'error')
+      this.level = l
+      const data = level()
+      if (this.gameController) {
+        this.gameController.dispose()
+      }
+      this.gameController = new GridPuzzle3D(data);
+      const actions = await this.gameController.initializeGameAsync()
+      const FUNCTION_DEFINITIONS = {
+        step: 'step(): Move player forward',
+        left: 'left(): Turn player left',
+        right: 'right(): Turn player right',
+        toggle: 'toggle(): Use/interact with items',
+        safe: 'safe(): Check if the next position is safe',
+        unDone: 'unDone(): Check if the game is not done'
+      };
 
-      methodResult = await this.gameController.run(method)
+      this.updateConsole(`\nWelcome to ${l} level\n# Available commands:\n${actions.map(x => `# ${FUNCTION_DEFINITIONS[x]}\n`).join('')}`)
+      return sendResult('$$')
     }
-
-
-
-
-    // JSON stringify the result and write to shared buffer
-    const jsonResult = JSON.stringify(methodResult ?? null);
-    const dataLength = jsonResult.length;
-
-    // Write length at position 1
-    Atomics.store(this.sharedData, 1, dataLength);
-
-    // Write JSON data starting at position 2
-    for (let i = 0; i < dataLength; i++) {
-      Atomics.store(this.sharedData, 2 + i, jsonResult.charCodeAt(i));
+    if (!this.gameController) {
+      return sendData("Please select a level, ex intro", 'error')
     }
-
-    // Set ready flag last
-    Atomics.store(this.sharedData, 0, 1);
-    Atomics.notify(this.sharedData, 0);
+    try {
+      sendResult(await this.gameController.run(method, print))
+    } catch (e) {
+      sendData((e as Error).message, 'error')
+    }
   }
 
   private updateConsole(text: string): void {

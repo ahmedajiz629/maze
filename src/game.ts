@@ -12,6 +12,7 @@ import {
 import '@babylonjs/loaders'; // This adds the loaders to the scene
 import * as parts from './parts';
 import { CONFIG } from './config';
+import { ActionName, Level } from './level';
 
 // Types
 interface Position {
@@ -65,12 +66,20 @@ class GridPuzzle3D {
 
   // Mesh templates
   private wallUnit!: Mesh;
+  private readonly MAP: string[];
+  private readonly TIME_MS: number; // button effect duration 
+  private readonly ROTATION: number // initial player rotation in radians
+  private readonly available: ActionName[]
 
   constructor(
-    protected readonly MAP: string[],
-    protected readonly TIME_MS = 5000, // button effect duration 
-    protected readonly ROTATION = 0 // initial player rotation in radians
+    data: Level,
+
+
   ) {
+    this.MAP = data.MAP
+    this.TIME_MS = data.TIME_MS ?? 5000
+    this.ROTATION = data.ROTATION ?? 0
+    this.available = data.functions ?? ['step', 'toggle', 'left', 'right', 'safe']
     this.W = this.MAP[0].length;
     this.H = this.MAP.length;
     this.canvas = document.getElementById("c") as HTMLCanvasElement;
@@ -92,7 +101,7 @@ class GridPuzzle3D {
     this.scene.dispose()
   }
 
-  public async initializeGameAsync(): Promise<void> {
+  public async initializeGameAsync(): Promise<ActionName[]> {
     // Initialize geometry first (this loads the box model)
 
     // Initialize the map (this will load all keys)
@@ -116,6 +125,7 @@ class GridPuzzle3D {
     // Replace with real player asynchronously
     await this.loadPlayer();
     this.start();
+    return this.available
   }
 
   private async loadPlayer(): Promise<void> {
@@ -169,7 +179,10 @@ class GridPuzzle3D {
     });
   }
 
-  public async run(action: 'step' | 'toggle' | 'left' | 'right' | 'safe' | 'unDone') {
+  public async run(action: ActionName, print: (text: string) => Promise<void>) {
+    if (!this.available.includes(action)) {
+      throw new Error(`${action} not available`);
+    }
     if (action === 'unDone') {
       return !this.player.won && !this.player.mesh.isDisposed();
     }
@@ -181,12 +194,12 @@ class GridPuzzle3D {
       safe: 'safe',
     } as const
     if (this.player.won) {
-      return "Press restart() to restart or level(leval_name) to choose another level"
+      throw new Error("Press restart() to restart or level(level_name) to choose another level")
     }
     if (this.player.mesh.isDisposed()) {
-      return "The player is dead, call restart() to restart"
+      throw new Error("The player is dead, call restart() to restart")
     }
-    return await this[actions[action]]()
+    return await this[actions[action]](print)
   }
 
   private async safe() {
@@ -203,9 +216,9 @@ class GridPuzzle3D {
   }
 
   // Public methods for Python REPL control
-  private async moveForward() {
+  private async moveForward(print: (text: string) => Promise<void>): Promise<void> {
     if (this.player.moving) return;
-    return this.movePlayerForwardAsync();
+    return this.movePlayerForwardAsync(print);
   }
 
   private async turnLeft(): Promise<void> {
@@ -273,7 +286,7 @@ class GridPuzzle3D {
     return { dx, dy, nx, ny }
   }
 
-  private async useAction(): Promise<void | string> {
+  private async useAction(print: (text: string) => Promise<void>): Promise<void | string> {
     // First check if there's a button on current position
     const currentKey = parts.keyOf(this.player.x, this.player.y);
     if (this.buttons.has(currentKey)) {
@@ -295,9 +308,9 @@ class GridPuzzle3D {
         Promise.all([...this.buttons.values()].map(b => this.animateButtonPress(b)));
         return
       } else if (button.toggled) {
-        return "Button already activated.";
+        return print("Button already activated.");
       } else {
-        return "You need to face the button to activate it.";
+        return print("You need to face the button to activate it.");
       }
     }
 
@@ -324,13 +337,13 @@ class GridPuzzle3D {
         // Wait for door opening animation to complete
         this.doors.delete(targetKey);
         this.blocked.delete(targetKey);
-        return "Door opened!";
+        return print("Door opened!");
 
       } else {
-        return ("You need a key to open this door!");
+        return print("You need a key to open this door!");
       }
     } else {
-      return "There's nothing to use here."
+      return print("There's nothing to use here.")
     }
   }
 
@@ -567,18 +580,18 @@ class GridPuzzle3D {
     this.checkLava()
   }
 
-  private async movePlayerForwardAsync() {
+  private async movePlayerForwardAsync(print: (text: string) => Promise<void> = async () => { }): Promise<void> {
 
     const { dx, dy, nx, ny } = this.computeNextPosition()
     if (!this.inBounds(nx, ny)) {
-      return "You can't go there";
+      throw new Error("You can't go there");
     }
 
     const targetKey = parts.keyOf(nx, ny);
 
     // Doors now block movement - they must be opened with T key first
     if (this.doors.has(targetKey)) {
-      return "Door closed, Run toggle() to open the door!";
+      throw new Error("Door closed, Run toggle() to open the door!");
     }
 
     // Handle box pushing
@@ -588,7 +601,7 @@ class GridPuzzle3D {
       const boxTargetKey = parts.keyOf(bx, by);
 
       if (!this.inBounds(bx, by) || this.isBlocked(bx, by)) {
-        return "Can't push box";
+        throw new Error("Can't push box");
       }
 
       const box = this.boxes.get(targetKey)!;
@@ -630,14 +643,14 @@ class GridPuzzle3D {
 
     // Final check: if still blocked, can't move
     if (this.isBlocked(nx, ny)) {
-      return "You can't go there";
+      throw new Error("You can't go there");
     }
 
     // Move player with completion callback
-    return await this.movePlayerAsync(nx, ny);
+    return await this.movePlayerAsync(nx, ny, print);
   }
 
-  private async movePlayerAsync(nx: number, ny: number) {
+  private async movePlayerAsync(nx: number, ny: number, print: (text: string) => Promise<void> = async () => { }): Promise<void> {
     this.player.moving = true;
 
     // Store initial positions for camera following
@@ -657,7 +670,7 @@ class GridPuzzle3D {
     this.player.x = nx;
     this.player.y = ny;
     this.player.moving = false;
-    return this.handlePlayerLanded();
+    return this.handlePlayerLanded(print);
   }
 
   private async tweenPlayerAndCamera(
@@ -694,7 +707,7 @@ class GridPuzzle3D {
     });
   }
 
-  private async handlePlayerLanded(): Promise<string | void> {
+  private async handlePlayerLanded(print: (text: string) => Promise<void>): Promise<void> {
     const playerKey = parts.keyOf(this.player.x, this.player.y);
 
     // Key pickup
@@ -711,17 +724,17 @@ class GridPuzzle3D {
       const timedLavaData = this.lava.get(playerKey)!;
       if (!timedLavaData.isPassable) { // If lava is visible, it's deadly
         this.player.mesh.dispose();
-        return "You fell in lava.";
+        throw new Error("You fell in lava.");
       }
     }
 
     // Exit check
     if (this.player.x === this.exitCell.x && this.player.y === this.exitCell.y) {
-      return this.triggerWinAnimation();
+      return this.triggerWinAnimation(print);
     }
   }
 
-  private async triggerWinAnimation(): Promise<string> {
+  private async triggerWinAnimation(print: (text: string) => Promise<void>): Promise<void> {
     this.player.moving = true; // Prevent further movement during animation
     this.player.won = new Date
     // Find the exit group to enhance its glow
@@ -735,11 +748,11 @@ class GridPuzzle3D {
 
     // Animate player rotating upward
     this.animatePlayerWin();
+    await print(`🎉 You win! Good job. 🎉\n${Date()}`);
 
     // Show win message after a delay
 
     await new Promise(resolve => setTimeout(resolve, 1000));
-    return `🎉 You win! Good job. 🎉\n${Date()}`;
   }
 
   private enhanceExitGlow(exitGroup: AbstractMesh): void {
