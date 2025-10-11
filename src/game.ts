@@ -11,7 +11,6 @@ import {
 } from '@babylonjs/core';
 import '@babylonjs/loaders'; // This adds the loaders to the scene
 import * as parts from './parts';
-import { CONFIG } from './config';
 import { ActionName, Level } from './level';
 
 // Types
@@ -40,7 +39,6 @@ class GridPuzzle3D {
 
   private engine!: Engine;
   private scene!: Scene;
-  private canvas: HTMLCanvasElement;
   private camera!: ArcRotateCamera;
 
   // Game state
@@ -59,9 +57,6 @@ class GridPuzzle3D {
   private buttons = new Map<string, { mesh: AbstractMesh, direction: number, toggled: boolean }>();
   private lava = new Map<string, { mesh: AbstractMesh, interval: number | null, isPassable: boolean }>();
 
-  // UI elements
-  private hudElement: HTMLElement;
-  private bannerElement: HTMLElement;
 
 
   // Mesh templates
@@ -73,8 +68,11 @@ class GridPuzzle3D {
 
   constructor(
     data: Level,
-
-
+    private readonly elements: { canvas: HTMLCanvasElement },
+    private readonly service: {
+      readonly updateKeys: (keys: number) => void;
+      readonly alert: (message: string) => void
+    },
   ) {
     this.MAP = data.MAP
     this.TIME_MS = data.TIME_MS ?? 5000
@@ -82,15 +80,8 @@ class GridPuzzle3D {
     this.available = data.functions ?? ['step', 'toggle', 'left', 'right', 'safe']
     this.W = this.MAP[0].length;
     this.H = this.MAP.length;
-    this.canvas = document.getElementById("c") as HTMLCanvasElement;
-    this.hudElement = document.getElementById("hud") as HTMLElement;
-    this.bannerElement = document.getElementById("banner") as HTMLElement;
 
-    if (!this.canvas || !this.hudElement || !this.bannerElement) {
-      throw new Error("Required HTML elements not found");
-    }
-
-    this.engine = parts.makeEngine(this.canvas);
+    this.engine = parts.makeEngine(this.elements.canvas);
     this.initScene();
 
     // Initialize map and load player asynchronously  
@@ -119,7 +110,7 @@ class GridPuzzle3D {
     Object.assign(this, cells); // Get spawn and exit cells
 
     // Create camera
-    this.camera = parts.createCamera(this.scene, this.canvas);
+    this.camera = parts.createCamera(this.scene, this.elements.canvas);
     this.initInput();
 
     // Replace with real player asynchronously
@@ -449,9 +440,7 @@ class GridPuzzle3D {
 
   private bye(message: string): void {
     this.player.mesh.dispose();
-    this.bannerElement.textContent = message;
-    this.bannerElement.style.display = 'block';
-    setTimeout(() => { this.bannerElement.style.display = 'none' }, 2000)
+    this.service.alert(message);
   }
 
   private async closeAllAutoDoors(): Promise<void> {
@@ -907,19 +896,7 @@ class GridPuzzle3D {
   }
 
   private updateHUD(): void {
-    const keysContainer = document.getElementById("keys-container");
-    if (!keysContainer) return;
-
-    // Clear existing keys
-    keysContainer.innerHTML = "";
-
-    // If no keys, show empty state
-    if (this.player.keys === 0) {
-      keysContainer.innerHTML = '<div style="color: #666; font-style: italic; font-size: 12px;">Empty</div>';
-      return;
-    }
-    keysContainer.innerHTML = '<div style="display: flex"><img width=30 src="/assets/models/key.png">' + this.player.keys + '</div>';
-
+    this.service.updateKeys(this.player.keys);
   }
 
 

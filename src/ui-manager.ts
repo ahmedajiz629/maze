@@ -1,7 +1,7 @@
 // UI initialization and management
-import { PythonREPL } from './python-repl';
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import App from './App';
 
-// Initialize UI when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-  const pythonREPL = new PythonREPL()
-});
+const root = createRoot(document.getElementById('app')!);
+root.render(React.createElement(App));
