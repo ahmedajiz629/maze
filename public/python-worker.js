@@ -220,5 +220,44 @@ output
         });
       }
       break;
+
+    case "checkCompletion":
+      if (!pyodide) {
+        postMessage({
+          type: "completionCheck",
+          data: { requestId: data.requestId, status: "incomplete" }
+        });
+        return;
+      }
+
+      try {
+        // Import console module and check code completion using Python
+        const result = pyodide.runPython(`
+import pyodide.console
+console = pyodide.console.Console()
+future = console.push(${JSON.stringify(data.code)})
+future.syntax_check
+        `);
+
+        console.log('Completion check result:', data.code, result);
+        
+        postMessage({
+          type: "completionCheck",
+          data: { 
+            requestId: data.requestId, 
+            status: result 
+          }
+        });
+      } catch (error) {
+        // If there's an error checking, assume it's complete and let Python handle it
+        postMessage({
+          type: "completionCheck",
+          data: { 
+            requestId: data.requestId, 
+            status: "incomplete" 
+          }
+        });
+      }
+      break;
   }
 };

@@ -27,6 +27,9 @@ export class PythonREPL {
     this.initPythonWorker();
   }
 
+
+  private completionCallbacks = new Map<string, (status: 'complete' | 'incomplete' | 'syntax-error') => void>();
+
   private initPythonWorker(): void {
     try {
       // Create SharedArrayBuffer for synchronous communication
@@ -65,6 +68,17 @@ export class PythonREPL {
             break;
           case 'print':
             this.handlers.onOutput(message);
+            break;
+
+          case 'completionCheck':
+            // Handle completion check response
+            const { requestId, status } = data;
+            const callbacks = this.completionCallbacks;
+            if (callbacks && callbacks.has(requestId)) {
+              const callback = callbacks.get(requestId);
+              callback?.(status);
+              callbacks.delete(requestId);
+            }
             break;
 
           case 'gameMethodSync':
@@ -195,6 +209,22 @@ export class PythonREPL {
     }
   }
 
+
+  public checkCodeCompletion(code: string, callback: (status: 'complete' | 'incomplete' | 'syntax-error') => void): void {
+    if (this.pythonWorker) {
+      const requestId = Math.random().toString(36).substr(2, 9);
+      
+      // Store callback for this request
+      this.completionCallbacks.set(requestId, callback);
+      
+      this.pythonWorker.postMessage({ 
+        type: 'checkCompletion', 
+        data: { code, requestId } 
+      });
+    } else {
+      callback('complete'); // Fallback if worker not ready
+    }
+  }
   public dispose(): void {
     if (this.pythonWorker) {
       this.pythonWorker.terminate();

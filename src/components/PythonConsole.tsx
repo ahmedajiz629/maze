@@ -19,14 +19,26 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
 }) => {
   const pythonReplRef = useRef<PythonREPL | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const consoleContainerRef = useRef<HTMLDivElement>(null);
   const [isReady, setIsReady] = useState(false);
   const [consoleOutput, setConsoleOutput] = useState('Python 3.11.0 (WebAssembly) - Loading...\n');
   const [inputValue, setInputValue] = useState('');
 
+  const scrollToBottom = useCallback(() => {
+    if (consoleContainerRef.current) {
+      consoleContainerRef.current.scrollTo({
+        top: consoleContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  }, []);
+
   const updateConsole = useCallback((text: string): void => {
     setConsoleOutput(prev => prev + text);
     onOutput(text);
-  }, [onOutput]);
+    // Scroll to bottom after updating console output
+    setTimeout(scrollToBottom, 0);
+  }, [onOutput, scrollToBottom]);
 
   const executeCode = useCallback((code: string): void => {
     if (pythonReplRef.current && code.trim()) {
@@ -39,12 +51,39 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
     }
   }, []);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      executeCode(inputValue);
+  const handleInputChange = useCallback(async (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+
+    // Check if there's a newline character
+    const newlineIndex = value.indexOf('\n');
+    if (newlineIndex !== -1) {
+      const lines = value.split('\n');
+
+      // If the new line is empty, check if we should execute
+      if (lines[lines.length - 1] === '') {
+        const codeToCheck = lines.slice(0, -1).join('\n');
+
+        if (codeToCheck.trim()) {
+          // Use Pyodide's Console class to check code completion
+          if (pythonReplRef.current) {
+            pythonReplRef.current.checkCodeCompletion(codeToCheck, (status) => {
+              console.log('Code completion status:', status);
+              if (status === 'complete') {
+                return executeCode(codeToCheck);
+              } else if (status === 'syntax-error') {
+                // Let Python handle the syntax error by executing it
+                return executeCode(codeToCheck);
+              }
+              // If 'incomplete', continue editing (do nothing)
+            });
+          }
+        } else {
+          return setInputValue('');
+        }
+      }
     }
-  }, [inputValue, executeCode]);
+    return setInputValue(value);
+  }, [executeCode]);
 
   // Initialize Python REPL when component mounts - only once
   useEffect(() => {
@@ -81,48 +120,70 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
   useEffect(() => {
     if (isReady) {
       setConsoleOutput(prev => prev.replace('Loading...', 'Ready! Type your Python code below and press Enter to execute.'));
+      setTimeout(scrollToBottom, 0);
     }
-  }, [isReady]);
+  }, [isReady, scrollToBottom]);
+
+  // Also scroll to bottom when console output changes
+  useEffect(() => {
+    scrollToBottom();
+  }, [consoleOutput, scrollToBottom]);
+
+  // Calculate textarea height based on number of lines
+  const calculateTextareaHeight = () => {
+    const lines = inputValue.split('\n').length;
+    const lineHeight = 20; // Approximate line height in pixels
+    const padding = 20; // Top and bottom padding
+    const minHeight = lineHeight + padding; // At least one line
+    return Math.max(minHeight, lines * lineHeight + padding);
+  };
 
   return (
-    <div className="python-console">
-      <div
-        className="console-output"
-        style={{
-          backgroundColor: '#1e1e1e',
-          color: '#d4d4d4',
-          fontFamily: 'Consolas, "Courier New", monospace',
-          fontSize: '14px',
-          padding: '10px',
-          height: '200px',
-          overflowY: 'auto',
-          whiteSpace: 'pre-wrap',
-          border: '1px solid #444',
-          marginBottom: '5px'
-        }}
-      >
+    <div
+      ref={consoleContainerRef}
+      className="python-console"
+      style={{
+        backgroundColor: '#1e1e1e',
+        color: '#d4d4d4',
+        fontFamily: 'Consolas, "Courier New", monospace',
+        fontSize: '14px',
+        padding: '10px',
+        overflowY: 'auto',
+        whiteSpace: 'pre-wrap',
+        border: '1px solid #444',
+        outline: 'none',
+        flex: 1,
+      }}
+    >
+      <div style={{ whiteSpace: 'pre-wrap' }}>
         {consoleOutput}
       </div>
-      <textarea
-        ref={textareaRef}
-        value={inputValue}
-        onChange={(e) => setInputValue(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={isReady ? "Type Python code here... (Enter to execute, Shift+Enter for new line)" : "Loading Python..."}
-        disabled={!isReady}
-        style={{
-          width: '100%',
-          height: '100px',
-          backgroundColor: '#2d2d2d',
-          color: '#d4d4d4',
-          fontFamily: 'Consolas, "Courier New", monospace',
-          fontSize: '14px',
-          padding: '10px',
-          border: '1px solid #444',
-          resize: 'vertical',
-          outline: 'none'
-        }}
-      />
+      <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+        <span style={{ color: '#4CAF50', marginRight: '4px' }}>{'>>> '}</span>
+        <textarea
+          ref={textareaRef}
+          value={inputValue}
+          onChange={handleInputChange}
+          placeholder={!isReady ? "Loading Python..." : ""}
+          disabled={!isReady}
+          style={{
+            backgroundColor: 'transparent',
+            color: '#d4d4d4',
+            fontFamily: 'Consolas, "Courier New", monospace',
+            fontSize: '14px',
+            border: 'none',
+            outline: 'none',
+            resize: 'none',
+            width: '100%',
+            height: `${calculateTextareaHeight()}px`,
+            padding: '0',
+            margin: '0',
+            lineHeight: '20px',
+            overflow: 'hidden'
+          }}
+        />
+      </div>
+      <div style={{ height: '50%' }} />
     </div>
   );
 };
