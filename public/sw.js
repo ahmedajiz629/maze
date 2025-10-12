@@ -79,15 +79,15 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       cacheFirstStrategy(event.request)
     );
+  } else if (url.pathname === '/' || url.pathname.endsWith('.html') || url.endsWith('worker.js')) {
+    // HTML files - Network first with cache fallback
+    event.respondWith(
+      networkFirstStrategy(event.request)
+    );
   } else if (url.pathname.endsWith('.js') || url.pathname.endsWith('.css')) {
     // JS/CSS files - Stale while revalidate
     event.respondWith(
       staleWhileRevalidateStrategy(event.request)
-    );
-  } else if (url.pathname === '/' || url.pathname.endsWith('.html')) {
-    // HTML files - Network first with cache fallback
-    event.respondWith(
-      networkFirstStrategy(event.request)
     );
   }
   // For other requests (APIs, external CDNs), let them go through normally

@@ -6,7 +6,8 @@ export const levels: Levels = {
       "##########",
       "#S.B.~..E#",
       "##########",
-    ]
+    ],
+    functions: ['step']
   }),
   while: () => ({
     MAP: [
@@ -16,14 +17,6 @@ export const levels: Levels = {
     ],
     functions: ['step', 'notDone']
   }),
-  speed: () => ({
-    MAP: [
-      "######",
-      "###Sy#",
-      "#Ea..#",
-      "######",
-    ]
-  }),
   box: () => ({
     MAP: [
       "##########",
@@ -31,7 +24,17 @@ export const levels: Levels = {
       "#.#.#B####",
       "#.#......#",
       "##########",
-    ]
+    ],
+    functions: ['step', 'left', 'right']
+  }),
+  speed: () => ({
+    MAP: [
+      "######",
+      "###Sy#",
+      "#Ea..#",
+      "######",
+    ],
+    functions: ['step', 'left', 'right', 'toggle']
   }),
   keys: () => ({
     MAP: [
@@ -42,7 +45,8 @@ export const levels: Levels = {
       "#.####.#",
       "#......#",
       "########",
-    ]
+    ],
+    functions: ['step', 'left', 'right', 'toggle']
   }),
   auto: () => ({
     MAP: [
@@ -53,7 +57,8 @@ export const levels: Levels = {
       "#y####.#",
       "#.a....#",
       "########",
-    ]
+    ],
+    functions: ['step', 'left', 'right', 'toggle']
   }),
   lava: () => ({
     MAP: [
@@ -61,6 +66,7 @@ export const levels: Levels = {
       "#St123456789.E#",
       "###############",
     ],
+    functions: ['step', 'left', 'right', 'toggle']
   }),
   random: () => {
     const MAP = [
@@ -111,6 +117,5 @@ export const levels: Levels = {
       EXTRA_DOOR_TS: 7000,
       EXTRA_LEVER_TS: -1,
     }
-
   }
 }
