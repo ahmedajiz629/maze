@@ -68,39 +68,35 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
     }
   }, [addConsoleEntry]);
 
-  const handleInputChange = useCallback(async (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value;
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInputValue(e.target.value);
+  }, []);
 
-    // Check if there's a newline character
-    const newlineIndex = value.indexOf('\n');
-    if (newlineIndex !== -1) {
-      const lines = value.split('\n');
-
-      // If the new line is empty, check if we should execute
-      if (lines[lines.length - 1] === '') {
-        const codeToCheck = lines.slice(0, -1).join('\n');
-
-        if (codeToCheck.trim()) {
-          // Use Pyodide's Console class to check code completion
-          if (pythonReplRef.current) {
-            pythonReplRef.current.checkCodeCompletion(codeToCheck, (status) => {
-              console.log('Code completion status:', status);
-              if (status === 'complete') {
-                return executeCode(codeToCheck);
-              } else if (status === 'syntax-error') {
-                // Let Python handle the syntax error by executing it
-                return executeCode(codeToCheck);
-              }
-              // If 'incomplete', continue editing (do nothing)
-            });
-          }
-        } else {
-          return setInputValue('');
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      
+      const code = inputValue
+      if (code) {
+        // Use Pyodide's Console class to check code completion
+        if (pythonReplRef.current) {
+          pythonReplRef.current.checkCodeCompletion(code, (status) => {
+            console.log('Code completion status:', status);
+            if (status === 'complete') {
+              return executeCode(code);
+            } else if (status === 'syntax-error') {
+              // Let Python handle the syntax error by executing it
+              return executeCode(code);
+            }
+            // If 'incomplete', add a newline and continue editing
+            setInputValue(prev => prev + '\n');
+          });
         }
+      } else {
+        setInputValue('');
       }
     }
-    return setInputValue(value);
-  }, [executeCode]);
+  }, [inputValue, executeCode]);
 
   // Initialize Python REPL when component mounts - only once
   useEffect(() => {
@@ -153,8 +149,8 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
 
   const lines = useMemo(() => Math.max(1, inputValue.split('\n').length), [inputValue]);
 
-  // Focus textarea when clicking anywhere in the console
-  const handleConsoleClick = useCallback(() => {
+  // Focus textarea when clicking in the input area
+  const handleInputAreaClick = useCallback(() => {
     if (textareaRef.current && isReady) {
       textareaRef.current.focus();
     }
@@ -171,7 +167,6 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
     <div
       ref={consoleContainerRef}
       className="python-console"
-      onClick={handleConsoleClick}
       style={{
         backgroundColor: '#1e1e1e',
         color: '#d4d4d4',
@@ -183,7 +178,6 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
         border: '1px solid #444',
         outline: 'none',
         flex: 1,
-        cursor: 'text',
       }}
     >
       <div style={{ whiteSpace: 'pre-wrap' }}>
@@ -193,7 +187,10 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
           </span>
         ))}
       </div>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+      <div 
+        style={{ display: 'flex', alignItems: 'flex-start', gap: 2, cursor: 'text' }}
+        onClick={handleInputAreaClick}
+      >
         <div className='console-input'>
           {Array.from({ length: lines }, (_, i) => <div key={i} />)}
         </div>
@@ -201,6 +198,7 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
           ref={textareaRef}
           value={inputValue}
           onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
           placeholder={!isReady ? "Loading Python..." : ""}
           disabled={!isReady}
           autoFocus={isReady}
@@ -221,7 +219,7 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
           }}
         />
       </div>
-      <div style={{ height: '50%' }} />
+      <div style={{ height: '50%', cursor: 'text' }} onClick={handleInputAreaClick} />
     </div>
   );
 };
