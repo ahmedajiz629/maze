@@ -1,7 +1,7 @@
 import { ActionName, Levels } from "./level";
 
 
-const functions: ActionName[] = ['step', 'left', 'right', 'safe', 'unDone', 'checkRight', 'checkLeft'] as const;
+const functions: ActionName[] = ['step', 'left', 'right', 'safe', 'notDone', 'checkRight', 'checkLeft'] as const;
 
 export const levels: Levels = {
   8: () => ({

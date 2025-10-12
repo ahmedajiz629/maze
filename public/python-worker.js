@@ -109,9 +109,9 @@ def safe():
     """Check if the next position is safe"""
     return callGameMethodSync('safe')
 
-def unDone():
+def notDone():
     """Check if the game is not done"""
-    return callGameMethodSync('unDone')
+    return callGameMethodSync('notDone')
 
 def check(direction):
     """Check if the given direction is safe"""
@@ -237,6 +237,7 @@ output
           type: "completionCheck",
           data: { requestId: data.requestId, status: "incomplete" },
         });
+        console.error('no pyodide');
         return;
       }
 
@@ -260,6 +261,7 @@ future.syntax_check
           }
         });
       } catch (error) {
+        console.error('Error during completion check:', error);
         // If there's an error checking, assume it's complete and let Python handle it
         postMessage({
           type: "completionCheck",

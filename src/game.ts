@@ -174,7 +174,7 @@ class GridPuzzle3D {
     if (!this.available.includes(action)) {
       throw new Error(`${action} not available`);
     }
-    if (action === 'unDone') {
+    if (action === 'notDone') {
       return !this.player.won && !this.player.mesh.isDisposed();
     }
     const actions = {

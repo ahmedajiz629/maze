@@ -1,4 +1,4 @@
-export type ActionName = 'step' | 'toggle' | 'left' | 'right' | 'safe' | 'unDone' | 'checkLeft' | 'checkRight';
+export type ActionName = 'step' | 'toggle' | 'left' | 'right' | 'safe' | 'notDone' | 'checkLeft' | 'checkRight';
 export type Level = {
   MAP: string[],
   TIME_MS?: number, 

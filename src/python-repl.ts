@@ -185,7 +185,7 @@ export class PythonREPL {
         right: 'right(): Turn player right',
         toggle: 'toggle(): Use/interact with items',
         safe: 'safe(): Check if the next position is safe',
-        unDone: 'unDone(): Check if the game is not done',
+        notDone: 'notDone(): Check if the game is not done',
         checkRight: "check('left' | 'right' | 'next'): Check if the given direction is safe",
         checkLeft: null,
       };

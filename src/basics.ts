@@ -14,7 +14,7 @@ export const levels: Levels = {
       "#S.B.~..E#",
       "##########",
     ],
-    functions: ['step', 'unDone']
+    functions: ['step', 'notDone']
   }),
   speed: () => ({
     MAP: [
