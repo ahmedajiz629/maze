@@ -67,7 +67,7 @@ class GridPuzzle3D {
   private readonly available: ActionName[]
 
   constructor(
-    data: Level,
+    private readonly data: Level,
     private readonly elements: { canvas: HTMLCanvasElement },
     private readonly service: {
       readonly updateKeys: (keys: number) => void;
@@ -424,16 +424,25 @@ class GridPuzzle3D {
 
       // Wait 5 seconds, then close doors and reset button
       setTimeout(async () => {
-        // Close all auto doors
-        await this.closeAllAutoDoors();
-
+        if (this.scene.isDisposed) return
         // Reset timed lava to non-passable
         this.resetTimedLava();
 
-        // Reset button position
-        await this.resetButtonPosition(innerButtonMesh, startX);
+        setTimeout(async () => {
+          if (this.scene.isDisposed) return
+          // Close all auto doors
+          await this.closeAllAutoDoors();
+          const leverTs = this.data.EXTRA_LEVER_TS ?? 0
+          if (leverTs !== -1) setTimeout(() => {
+            if (this.scene.isDisposed) return
+            // Reset button position
+            this.resetButtonPosition(innerButtonMesh, startX).then(() => {
+              button.toggled = false
+            });
+          }, leverTs);
 
-        button.toggled = false
+        }, this.data.EXTRA_DOOR_TS ?? 0)
+
       }, this.TIME_MS);
     }
   }
@@ -539,6 +548,7 @@ class GridPuzzle3D {
 
     for (let i = 0; i < 10; i++) {
       setTimeout(() => {
+        if (this.scene.isDisposed) return
         // During interval i, lava blocks i and (i+1) become passable
         this.updateTimedLavaPassability(i);
       }, i * intervalDuration);

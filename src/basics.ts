@@ -87,7 +87,7 @@ export const levels: Levels = {
     const MAP = [
       "##########",
       "#......a.#",
-      "#.######y#",
+      "#.######.#",
       "#.K#...d.#",
       "####B###.#",
       "#E.~.....#",
@@ -107,7 +107,9 @@ export const levels: Levels = {
     }
     return {
       MAP,
-      TIME_MS: 10000
+      TIME_MS: 10000,
+      EXTRA_DOOR_TS: 7000,
+      EXTRA_LEVER_TS: -1,
     }
 
   }

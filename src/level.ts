@@ -2,6 +2,8 @@ export type ActionName = 'step' | 'toggle' | 'left' | 'right' | 'safe' | 'unDone
 export type Level = {
   MAP: string[],
   TIME_MS?: number, 
+  EXTRA_DOOR_TS?: number,
+  EXTRA_LEVER_TS?: number,
   ROTATION?: number,
   functions?: ActionName[]
 };
