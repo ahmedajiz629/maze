@@ -179,16 +179,18 @@ export class PythonREPL {
       }
       this.gameController = new GridPuzzle3D(data, { canvas }, this.services);
       const actions = await this.gameController.initializeGameAsync()
-      const FUNCTION_DEFINITIONS = {
+      const defs = {
         step: 'step(): Move player forward',
         left: 'left(): Turn player left',
         right: 'right(): Turn player right',
         toggle: 'toggle(): Use/interact with items',
         safe: 'safe(): Check if the next position is safe',
-        unDone: 'unDone(): Check if the game is not done'
+        unDone: 'unDone(): Check if the game is not done',
+        checkRight: "check('left' | 'right' | 'next'): Check if the given direction is safe",
+        checkLeft: null,
       };
 
-      this.handlers.onOutput(`\nWelcome to ${l} level\n# Available commands:\n${actions.map(x => `# ${FUNCTION_DEFINITIONS[x]}\n`).join('')}`);
+      this.handlers.onOutput(`\nWelcome to ${l} level\n# Available commands:\n${actions.flatMap(x => defs[x] ? [`# ${defs[x]}\n`] : []).join('')}`);
       return sendResult('$$')
     }
     if (!this.gameController) {
@@ -213,13 +215,13 @@ export class PythonREPL {
   public checkCodeCompletion(code: string, callback: (status: 'complete' | 'incomplete' | 'syntax-error') => void): void {
     if (this.pythonWorker) {
       const requestId = Math.random().toString(36).substr(2, 9);
-      
+
       // Store callback for this request
       this.completionCallbacks.set(requestId, callback);
-      
-      this.pythonWorker.postMessage({ 
-        type: 'checkCompletion', 
-        data: { code, requestId } 
+
+      this.pythonWorker.postMessage({
+        type: 'checkCompletion',
+        data: { code, requestId }
       });
     } else {
       callback('complete'); // Fallback if worker not ready

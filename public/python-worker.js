@@ -70,6 +70,7 @@ async function initPyodide(predefined) {
     // Define Python functions that call game methods synchronously
     await pyodide.runPython(`
 import time
+from pyodide.ffi import JsException
 
 import sys
 from io import StringIO
@@ -111,6 +112,17 @@ def safe():
 def unDone():
     """Check if the game is not done"""
     return callGameMethodSync('unDone')
+
+def check(direction):
+    """Check if the given direction is safe"""
+    if direction == 'left':
+        return callGameMethodSync('checkLeft')
+    elif direction == 'right':
+        return callGameMethodSync('checkRight')
+    elif direction == 'next':
+        return callGameMethodSync('safe')
+    else:
+        raise JsException("Invalid direction for check(): " + str(direction))
 
 def level(name):
     """Change level"""

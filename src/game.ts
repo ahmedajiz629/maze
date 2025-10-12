@@ -183,6 +183,8 @@ class GridPuzzle3D {
       left: 'turnLeft',
       right: 'turnRight',
       safe: 'safe',
+      checkLeft: 'checkLeft',
+      checkRight: 'checkRight'
     } as const
     if (this.player.won) {
       throw new Error("Press restart() to restart or level(level_name) to choose another level")
@@ -193,8 +195,20 @@ class GridPuzzle3D {
     return await this[actions[action]](print)
   }
 
-  private async safe() {
-    const { nx, ny } = this.computeNextPosition()
+  private checkLeft() {
+    return this._safe(Math.PI / 2);
+  }
+
+  private checkRight() {
+    return this._safe(-Math.PI / 2);
+  }
+
+  private safe() {
+    return this._safe();
+  }
+
+  private async _safe(deltaRotation = 0) {
+    const { nx, ny } = this.computeNextPosition(this.player.rotation + deltaRotation)
     const playerKey = parts.keyOf(nx, ny)
     if (this.isBlocked(nx, ny)) return false
     if (this.lava.has(playerKey)) {
@@ -264,10 +278,10 @@ class GridPuzzle3D {
     });
   }
 
-  private computeNextPosition() {
+  private computeNextPosition(rotation = this.player.rotation) {
     // Calculate the direction vector based on player rotation
-    const _dx = Math.cos(this.player.rotation);
-    const _dy = Math.sin(this.player.rotation);
+    const _dx = Math.cos(rotation);
+    const _dy = Math.sin(rotation);
 
     // Round to get grid-aligned movement
     const dx = Math.round(_dx);

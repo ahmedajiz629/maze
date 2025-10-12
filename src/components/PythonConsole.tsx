@@ -204,6 +204,7 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
           placeholder={!isReady ? "Loading Python..." : ""}
           disabled={!isReady}
           autoFocus={isReady}
+          spellCheck={false}
           style={{
             backgroundColor: 'transparent',
             color: '#d4d4d4',

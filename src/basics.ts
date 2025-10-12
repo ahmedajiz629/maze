@@ -8,6 +8,14 @@ export const levels: Levels = {
       "##########",
     ]
   }),
+  while: () => ({
+    MAP: [
+      "##########",
+      "#S.B.~..E#",
+      "##########",
+    ],
+    functions: ['step', 'unDone']
+  }),
   speed: () => ({
     MAP: [
       "######",

@@ -1,4 +1,7 @@
-import { Levels } from "./level";
+import { ActionName, Levels } from "./level";
+
+
+const functions: ActionName[] = ['step', 'left', 'right', 'safe', 'unDone', 'checkRight', 'checkLeft'] as const;
 
 export const levels: Levels = {
   8: () => ({
@@ -11,7 +14,8 @@ export const levels: Levels = {
       "#S..#E#",
       "#######",
     ].map(x=>[...x].reverse().join('')),
-    ROTATION: Math.PI
+    ROTATION: Math.PI,
+    functions
   }),
   10: () => ({
     MAP: [
@@ -24,6 +28,7 @@ export const levels: Levels = {
       "#S...#.#",
       "########",
     ].map(x=>[...x].reverse().join('')),
-    ROTATION: Math.PI
+    ROTATION: Math.PI,
+    functions
   }),
 }
