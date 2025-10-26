@@ -43,8 +43,12 @@ function callGameMethodSync(method, print, ...args) {
     const isError = status === 2;
     if (isError) throw dataRead;
     const response = JSON.parse(dataRead);
-    if (response === "$$") {
+    if (response.startsWith("$$")) {
       pyodide.globals.set("gameControllerReady", true);
+      if (response.length > 2) {
+        const code = response.slice(2);
+        pyodide.runPython(code);
+      }
       return "Level loaded";
     }
     return response;

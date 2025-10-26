@@ -6,6 +6,9 @@ export type Level = {
   EXTRA_LEVER_TS?: number,
   ROTATION?: number,
   functions?: ActionName[]
+} | {
+  MAP?: undefined,
+  code: string
 };
 
 export type Levels = Record<string, () => Level>;

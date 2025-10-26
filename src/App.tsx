@@ -28,6 +28,7 @@ const App: React.FC = () => {
   }, []);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const panelRef = React.useRef<HTMLDivElement | null>(null);
 
   const services = React.useMemo(() => ({
     updateKeys: (newKeys: number) => setKeys(newKeys),
@@ -35,7 +36,7 @@ const App: React.FC = () => {
   }), [setKeys, setMessages]);
   return (
     <>
-      <div className="game-panel">
+      <div className="game-panel" ref={panelRef}>
         <div className="hud">
           <div className="hud-title">Items</div>
           <div className="keys-container">{
@@ -55,6 +56,7 @@ const App: React.FC = () => {
         onOutput={handlePythonOutput}
         onError={handlePythonError}
         canvasRef={canvasRef}
+        panelRef={panelRef}
         services={services}
       />
     </>

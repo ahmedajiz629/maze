@@ -79,7 +79,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       cacheFirstStrategy(event.request)
     );
-  } else if (url.pathname === '/' || url.pathname.endsWith('.html') || url.endsWith('worker.js')) {
+  } else if (url.pathname === '/' || url.pathname.endsWith('.html') || url.pathname.endsWith('worker.js')) {
     // HTML files - Network first with cache fallback
     event.respondWith(
       networkFirstStrategy(event.request)

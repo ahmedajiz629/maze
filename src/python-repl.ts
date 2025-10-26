@@ -21,7 +21,8 @@ export class PythonREPL {
       readonly onError: (error: string) => void,
       readonly onResult: () => void,
     },
-    private readonly getCanva: () => HTMLCanvasElement | null,
+    private readonly getCanvas: () => HTMLCanvasElement | null,
+    private readonly getPanel: () => HTMLDivElement | null,
     private readonly services: Services
   ) {
     this.initPythonWorker();
@@ -173,10 +174,15 @@ export class PythonREPL {
       if (this.gameController) {
         this.gameController.dispose()
       }
-      const canvas = this.getCanva()
+      const canvas = this.getCanvas()
       if (!canvas) {
         return sendData('Canvas not ready', 'error')
       }
+      if (!data.MAP) {
+        this.getPanel()?.style.setProperty('display', 'none')
+        return sendResult('$$'+data.code)
+      }
+      this.getPanel()?.style.setProperty('display', 'block');
       this.gameController = new GridPuzzle3D(data, { canvas }, this.services);
       const actions = await this.gameController.initializeGameAsync()
       const defs = {

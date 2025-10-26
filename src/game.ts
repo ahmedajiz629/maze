@@ -67,7 +67,7 @@ class GridPuzzle3D {
   private readonly available: ActionName[]
 
   constructor(
-    private readonly data: Level,
+    private readonly data: Level & { MAP: string[] },
     private readonly elements: { canvas: HTMLCanvasElement },
     private readonly service: {
       readonly updateKeys: (keys: number) => void;

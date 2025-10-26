@@ -6,6 +6,7 @@ interface PythonConsoleProps {
   onOutput: (text: string) => void;
   onError: (error: string) => void;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
+  panelRef: React.RefObject<HTMLDivElement | null>;
   services: Services;
 
 }
@@ -21,6 +22,7 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
   onOutput,
   onError,
   canvasRef,
+  panelRef,
   services
 }) => {
   const pythonReplRef = useRef<PythonREPL | null>(null);
@@ -31,6 +33,8 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
     { type: 'system', text: 'Python 3.11.0 (WebAssembly) - Loading...', color: '#FFC107' }
   ]);
   const [inputValue, setInputValue] = useState('');
+  const [commandHistory, setCommandHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   const scrollToBottom = useCallback(() => {
     if (consoleContainerRef.current) {
@@ -59,6 +63,16 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
   const executeCode = useCallback((code: string): void => {
     console.log({code})
     if (pythonReplRef.current && code.trim()) {
+      // Add command to history
+      setCommandHistory(prev => {
+        const newHistory = [...prev, code];
+        // Keep only last 50 commands to prevent memory issues
+        return newHistory.slice(-50);
+      });
+      
+      // Reset history index
+      setHistoryIndex(-1);
+      
       // Add the input to console entries
       addConsoleEntry({ type: 'input', text: `${code}`, color: '#4CAF50' });
       // Execute the code
@@ -95,8 +109,30 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
       } else {
         setInputValue('');
       }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      // Navigate to previous command in history
+      if (commandHistory.length > 0) {
+        const newIndex = historyIndex === -1 ? commandHistory.length - 1 : Math.max(0, historyIndex - 1);
+        setHistoryIndex(newIndex);
+        setInputValue(commandHistory[newIndex]);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      // Navigate to next command in history
+      if (historyIndex >= 0) {
+        if (historyIndex === commandHistory.length - 1) {
+          // At the end of history, clear input
+          setHistoryIndex(-1);
+          setInputValue('');
+        } else {
+          const newIndex = historyIndex + 1;
+          setHistoryIndex(newIndex);
+          setInputValue(commandHistory[newIndex]);
+        }
+      }
     }
-  }, [inputValue, executeCode]);
+  }, [inputValue, executeCode, commandHistory, historyIndex]);
 
   // Initialize Python REPL when component mounts - only once
   useEffect(() => {
@@ -118,7 +154,7 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
       }
     };
 
-    pythonReplRef.current = new PythonREPL(handlers, () => canvasRef.current, services);
+    pythonReplRef.current = new PythonREPL(handlers, () => canvasRef.current, () => panelRef.current, services);
 
     return () => {
       if (pythonReplRef.current) {
