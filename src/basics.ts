@@ -5,6 +5,30 @@ export const levels: Levels = {
     code: `def hi():
   print("Hello, World!")`
   }),
+  nim: () => ({
+    code: `from random import randrange
+def test(code):
+  n = randrange(20, 30)
+  def take(x):
+    nonlocal n
+    if x >= n:
+      raise RuntimeError("You can't")
+    n -= x
+    print('Player takes', x, 'remaining', n)
+    if n % 4 == 1:
+      took = randrange(1, min(4, n + 1))
+    else:
+      took = ((n - 1) % 4)
+    n -= took
+    print('AI takes', took, 'remaining', n)
+    return took
+  code(n, take)
+  if n == 0:
+    print('You win!')
+  else:
+    print('AI wins!')
+`
+  }),
   secret: () => ({
     code: `from random import randrange
 def test(code):
