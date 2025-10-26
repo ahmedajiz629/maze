@@ -1,2 +1,0 @@
-ursina
-panda3d
