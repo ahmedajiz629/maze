@@ -42,8 +42,9 @@ function callGameMethodSync(method, print, ...args) {
     }
     const isError = status === 2;
     if (isError) throw dataRead;
+    console.log("Game method response:", dataRead);
     const response = JSON.parse(dataRead);
-    if (response.startsWith("$$")) {
+    if (typeof response === "string" && response.startsWith("$$")) {
       pyodide.globals.set("gameControllerReady", true);
       if (response.length > 2) {
         const code = response.slice(2);
@@ -225,6 +226,7 @@ output
           },
         });
       } catch (error) {
+        console.error("Error during code execution:", error);
         postMessage({
           type: "error",
           message:
