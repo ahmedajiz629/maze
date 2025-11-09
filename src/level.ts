@@ -9,6 +9,7 @@ export type Level = {
 } | {
   MAP?: undefined,
   code: string
+  description?: string
 };
 
 export type Levels = Record<string, () => Level>;

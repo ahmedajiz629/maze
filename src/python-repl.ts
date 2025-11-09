@@ -1,7 +1,7 @@
 // Python REPL controller - handles communication between UI and Python Worker
 import { CONFIG } from './config';
 import { GridPuzzle3D } from './game';
-import { ActionName } from './level';
+import { ActionName, Levels } from './level';
 
 
 export type Services = { readonly updateKeys: (keys: number) => void; readonly alert: (message: string) => void }
@@ -9,7 +9,7 @@ export class PythonREPL {
   private pythonWorker: Worker | null = null;
   private gameController: GridPuzzle3D | null = null;
 
-  private sharedBuffer = new SharedArrayBuffer(1024 * 4); // 1KB for JSON data
+  private sharedBuffer = new SharedArrayBuffer(1024 * 40); // 40KB for JSON data
   private sharedData = new Int32Array(this.sharedBuffer);
 
   // Callbacks for React integration
@@ -122,6 +122,8 @@ export class PythonREPL {
   }
   private async handleSyncGameMethod(method: ActionName | 'level' | 'levels' | 'restart', args: unknown[], waitReady: () => Promise<void>): Promise<void> {
     const sendData = (data: string, type: 'result' | 'error' | 'output') => {
+      if(type === 'error') console.error('Sending error to worker:', data);
+      
       if (!this.sharedData) throw new Error('Shared data not available');
       // JSON stringify the result and write to shared buffer
       const dataLength = data.length;
@@ -148,9 +150,15 @@ export class PythonREPL {
       sendData(jsonData, 'result')
     }
 
+    const LEVELS = { basics: () => import('./basics'), blockly: () => import('./blockly') }
+
     // Read method from shared memory  
     if (method === 'levels') {
-      this.levels = args[0] as string
+      const l = args[0] as string
+      if (l === '?') {
+        return sendResult('Available levels collections: ' + Object.keys(LEVELS).join(', '))
+      }
+      this.levels = l
       method = 'level'
       args = ['$']
       this.level = null
@@ -162,8 +170,12 @@ export class PythonREPL {
     if (method === 'level') {
       let l = args[0] as undefined | string
       const levelsStr = this.levels ?? 'basics'
-      const { levels } = await { [levelsStr]: () => import('./basics'), blockly: () => import('./blockly') }[levelsStr]()
+      const list: Record<string, () => Promise<{ levels: Levels }>> = { [levelsStr]: LEVELS.basics, ...LEVELS }
+      const { levels } = await list[levelsStr]()
       if (l === '$') l = this.level ?? Object.keys(levels)[0]
+      if (l === '?') {
+        return sendResult('Available levels: ' + Object.keys(levels).join(', '))
+      }
       const level = l && levels[l]
       if (typeof l !== 'string') {
         return sendData('Please select a level first', 'error')
@@ -180,7 +192,8 @@ export class PythonREPL {
       }
       if (!data.MAP) {
         this.getPanel()?.style.setProperty('display', 'none')
-        return sendResult('$$'+data.code)
+        if (data.description) this.handlers.onOutput(`\n\n${data.description}\n\n`)
+        return sendResult('$$' + data.code)
       }
       this.getPanel()?.style.setProperty('display', 'block');
       this.gameController = new GridPuzzle3D(data, { canvas }, this.services);
