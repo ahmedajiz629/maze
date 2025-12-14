@@ -39,6 +39,18 @@ interface CodeTestResult {
   error?: string;
 }
 
+const renderPromptWithInlineCode = (text: string): React.ReactNode => {
+  const parts = text.split('`');
+  if (parts.length === 1) return text;
+  return parts.map((part, index) =>
+    index % 2 === 0 ? (
+      part
+    ) : (
+      <code key={index}>{part}</code>
+    ),
+  );
+};
+
 const MCQ_QUESTIONS: McqQuestion[] = [
   {
     id: 1,
@@ -479,7 +491,7 @@ const CODE_QUESTIONS: CodeQuestion[] = [
     id: 21,
     title: 'س21) دالة ترجع تحيّة',
     prompt:
-      'اكتب دالة باسم format_greeting(name, age) تعيد نصًا بالضبط بالشكل: Bonjour NAME, tu as AGE ans. لا تطبع داخل الدالة، فقط أرجِع النص كسلسلة.',
+      'اكتب دالة باسم `format_greeting(name, age)` تعيد نصًا بالضبط بالشكل: `Bonjour NAME, tu as AGE ans`. لا تطبع داخل الدالة، فقط أرجِع النص كسلسلة.',
     rubric:
       'وجود دالة format_greeting(name, age) تعيد سلسلة نصية بالصيغة الدقيقة تمامًا، مع استبدال NAME و AGE بالقيم الممرَّرة.',
     sampleAnswer:
@@ -489,7 +501,7 @@ const CODE_QUESTIONS: CodeQuestion[] = [
     id: 22,
     title: 'س22) تصنيف العمر بدالة',
     prompt:
-      'اكتب دالة باسم classify_age(age) تعيد نصًا بالضبط إما "You are an adult" إذا كان العمر أكبر من أو يساوي 18، أو "You are a minor" إذا كان أقل من 18. لا تستخدم input داخل الدالة.',
+      'اكتب دالة باسم `classify_age(age)` تعيد نصًا بالضبط إما `You are an adult` إذا كان العمر أكبر من أو يساوي 18، أو `You are a minor` إذا كان أقل من 18. لا تستخدم input داخل الدالة.',
     rubric:
       'وجود دالة classify_age(age) تُرجع السلسلتين المحددتين حرفيًا بحسب قيمة العمر دون طباعة.',
     sampleAnswer:
@@ -499,7 +511,7 @@ const CODE_QUESTIONS: CodeQuestion[] = [
     id: 23,
     title: 'س23) دالة تجمع من 1 إلى n',
     prompt:
-      'اكتب دالة باسم sum_to_n(n) تعيد مجموع الأعداد من 1 إلى n (مثلًا sum_to_n(5) تُرجع 15). لا تطبع داخل الدالة، فقط أرجِع الناتج.',
+      'اكتب دالة باسم `sum_to_n(n)` تعيد مجموع الأعداد من 1 إلى n (مثلًا `sum_to_n(5)` تُرجع 15). لا تطبع داخل الدالة، فقط أرجِع الناتج.',
     rubric:
       'وجود دالة sum_to_n(n) تستخدم حلقة أو أي طريقة صحيحة لإرجاع مجموع 1..n كعدد صحيح.',
     sampleAnswer:
@@ -509,7 +521,7 @@ const CODE_QUESTIONS: CodeQuestion[] = [
     id: 24,
     title: 'س24) دالة تجمع عددين',
     prompt:
-      'اكتب دالة اسمها add_two_numbers تستقبل عددين وتُرجع مجموعهما، ثم استدعها مع 3 و7 واطبع الناتج.',
+      'اكتب دالة اسمها `add_two_numbers(a, b)` تستقبل عددين وتُرجع مجموعهما، ثم يمكنك استدعاؤها مثلًا مع 3 و7 وقراءة الناتج.',
     rubric:
       'تعريف دالة تجمع معاملين، استدعاء الدالة مع (3, 7)، وطباعة الناتج 10.',
     sampleAnswer:
@@ -519,7 +531,7 @@ const CODE_QUESTIONS: CodeQuestion[] = [
     id: 25,
     title: 'س25) دالة تحدّد زوجي أو فردي',
     prompt:
-      'اكتب دالة باسم even_or_odd(n) تعيد نصًا بالضبط بالشكل "X is even" أو "X is odd" حيث X هو العدد n. لا تطبع داخل الدالة.',
+      'اكتب دالة باسم `even_or_odd(n)` تعيد نصًا بالضبط بالشكل `X is even` أو `X is odd` حيث X هو العدد n. لا تطبع داخل الدالة.',
     rubric:
       'وجود دالة even_or_odd(n) تستخدم شرطًا صحيحًا للتمييز بين زوجي وفردي وتُرجع النص بالدقة المطلوبة.',
     sampleAnswer:
@@ -881,7 +893,7 @@ const PythonQuizArabic: React.FC = () => {
                     <span className="quiz-question-number">س{q.id}</span>
                     <h3 className="quiz-question-text">{q.title}</h3>
                   </div>
-                  <p className="quiz-section-desc">{q.prompt}</p>
+                  <p className="quiz-section-desc">{renderPromptWithInlineCode(q.prompt)}</p>
 
                   <textarea
                     className="quiz-code-input"
