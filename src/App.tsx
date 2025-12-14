@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom';
 import PythonConsole from './components/PythonConsole';
+import PythonQuizArabic from './components/PythonQuizArabic';
 
-const App: React.FC = () => {
+const GamePage: React.FC = () => {
   const [pythonReady, setPythonReady] = useState(false);
   const [outputHistory, setOutputHistory] = useState<string[]>([]);
   const [keys, setKeys] = useState<number | null>(null);
   const [messages, setMessages] = useState<string>('');
-
 
   useEffect(() => {
     if (messages) {
@@ -14,14 +15,18 @@ const App: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [messages, setMessages]);
+
   const handlePythonReady = useCallback(() => {
     console.log('Python REPL is ready!');
     setPythonReady(true);
   }, [setPythonReady]);
 
-  const handlePythonOutput = useCallback((text: string) => {
-    setOutputHistory(prev => [...prev, text]);
-  }, [setOutputHistory]);
+  const handlePythonOutput = useCallback(
+    (text: string) => {
+      setOutputHistory((prev) => [...prev, text]);
+    },
+    [setOutputHistory],
+  );
 
   const handlePythonError = useCallback((error: string) => {
     console.error('Python REPL error:', error);
@@ -30,25 +35,41 @@ const App: React.FC = () => {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const panelRef = React.useRef<HTMLDivElement | null>(null);
 
-  const services = React.useMemo(() => ({
-    updateKeys: (newKeys: number) => setKeys(newKeys),
-    alert: (message: string) => setMessages(message)
-  }), [setKeys, setMessages]);
+  const services = React.useMemo(
+    () => ({
+      updateKeys: (newKeys: number) => setKeys(newKeys),
+      alert: (message: string) => setMessages(message),
+    }),
+    [setKeys, setMessages],
+  );
+
   return (
     <>
       <div className="game-panel" ref={panelRef}>
         <div className="hud">
           <div className="hud-title">Items</div>
-          <div className="keys-container">{
-            keys === null ? '' : keys === 0 ? (
-              <div style={{ color: '#666', fontStyle: 'italic', fontSize: '12px' }}>Empty</div>
+          <div className="keys-container">
+            {keys === null ? (
+              ''
+            ) : keys === 0 ? (
+              <div style={{ color: '#666', fontStyle: 'italic', fontSize: '12px' }}>
+                Empty
+              </div>
             ) : (
-              <div style={{ display: 'flex' }}><img width={30} src="/assets/models/key.png" />{keys}</div>
-            )
-          }</div>
+              <div style={{ display: 'flex' }}>
+                <img width={30} src="/assets/models/key.png" />
+                {keys}
+              </div>
+            )}
+          </div>
         </div>
-        <div className='banner' style={{ display: messages ? 'block' : 'none' }}>{messages}</div>
-        <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%' }}></canvas>
+        <div className="banner" style={{ display: messages ? 'block' : 'none' }}>
+          {messages}
+        </div>
+        <canvas
+          ref={canvasRef}
+          style={{ display: 'block', width: '100%', height: '100%' }}
+        ></canvas>
       </div>
 
       <PythonConsole
@@ -60,6 +81,44 @@ const App: React.FC = () => {
         services={services}
       />
     </>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <BrowserRouter>
+      <div className="app-shell">
+        <header className="top-nav">
+          <div className="top-nav-brand">Python Maze</div>
+          <nav className="top-nav-links" aria-label="Main navigation">
+            <NavLink
+              to="/"
+              end
+              className={({ isActive }) =>
+                isActive ? 'nav-link nav-link-active' : 'nav-link'
+              }
+            >
+              اللعبة
+            </NavLink>
+            <NavLink
+              to="/quiz"
+              className={({ isActive }) =>
+                isActive ? 'nav-link nav-link-active' : 'nav-link'
+              }
+            >
+              اختبار بايثون
+            </NavLink>
+          </nav>
+        </header>
+
+        <main className="app-main">
+          <Routes>
+            <Route path="/" element={<GamePage />} />
+            <Route path="/quiz" element={<PythonQuizArabic />} />
+          </Routes>
+        </main>
+      </div>
+    </BrowserRouter>
   );
 };
 
