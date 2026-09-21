@@ -35,38 +35,6 @@ def test(code):
 `})
 
 export const levels: Levels = {
-  hi: () => ({
-    code: `def hi():
-  print("Hello, World!")`
-  }),
-  nim: () => nim(1, 3),
-  nim2: () => nim(2, 5),
-  secret: () => ({
-    code: `from random import randrange
-def test(code):
-  secret = randrange(20) + 1
-  tries = 0
-  max_tries = 5
-  def check(guess):
-    nonlocal tries
-    tries += 1
-    if tries > max_tries:
-      raise RuntimeError('Out of tries')
-    print('checking', guess, 'try nb =', tries)
-    if guess == secret:
-      print('found', guess)
-      return 0
-    elif guess < secret:
-      print('Too low', guess)
-      return 1
-    else:
-      print('Too high', guess)
-      return -1
-  if secret == code(check):
-    print('Bingo')
-  else: print('Try again')
-`
-  }),
   intro: () => ({
     MAP: [
       "##########",
@@ -183,5 +151,37 @@ def test(code):
       EXTRA_DOOR_TS: 7000,
       EXTRA_LEVER_TS: -1,
     }
-  }
+  },
+  hi: () => ({
+    code: `def hi():
+  print("Hello, World!")`
+  }),
+  nim: () => nim(1, 3),
+  nim2: () => nim(2, 5),
+  secret: () => ({
+    code: `from random import randrange
+def test(code):
+  secret = randrange(20) + 1
+  tries = 0
+  max_tries = 5
+  def check(guess):
+    nonlocal tries
+    tries += 1
+    if tries > max_tries:
+      raise RuntimeError('Out of tries')
+    print('checking', guess, 'try nb =', tries)
+    if guess == secret:
+      print('found', guess)
+      return 0
+    elif guess < secret:
+      print('Too low', guess)
+      return 1
+    else:
+      print('Too high', guess)
+      return -1
+  if secret == code(check):
+    print('Bingo')
+  else: print('Try again')
+`
+  }),
 }

@@ -172,7 +172,7 @@ export class PythonREPL {
       const levelsStr = this.levels ?? 'basics'
       const list: Record<string, () => Promise<{ levels: Levels }>> = { [levelsStr]: LEVELS.basics, ...LEVELS }
       const { levels } = await list[levelsStr]()
-      if (l === '$') l = this.level ?? Object.keys(levels)[0]
+      if (l === '$') l = this.level ?? (levels.integration ? 'integration' : Object.keys(levels)[0])
       if (l === '?') {
         return sendResult('Available levels: ' + Object.keys(levels).join(', '))
       }
