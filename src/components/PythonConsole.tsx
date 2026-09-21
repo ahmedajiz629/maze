@@ -170,7 +170,7 @@ const PythonConsole: React.FC<PythonConsoleProps> = ({
       setConsoleEntries(prev =>
         prev.map(entry =>
           entry.text.includes('Loading...')
-            ? { ...entry, text: 'Python 3.11.0 (WebAssembly) - Ready! Type your Python code below and press Enter to execute.', color: '#4CAF50' }
+            ? { ...entry, text: 'Python 3.11.0 (WebAssembly) - Ready! Type your Python code below and press Enter to execute. Call help() for a full guide.', color: '#4CAF50' }
             : entry
         )
       );

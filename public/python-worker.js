@@ -145,6 +145,106 @@ def sleep(seconds):
     """Sleep function that works in web worker"""
     import time
     time.sleep(seconds)
+
+def help():
+    """Explain how this playground works"""
+    print("""How this playground works
+=========================
+
+Type Python and press Enter to run it.
+If a block is unfinished (def, if, while, or for still needs a body),
+Enter adds another line instead of running. Arrow up and down recall
+earlier commands.
+
+Functions you define are saved in this browser and restored next visit.
+Call help() any time to see this guide again.
+
+Levels
+------
+level('name')    load a level
+level('?')       list levels in the current collection
+levels('name')   switch collection: basics or blockly
+levels('?')      list collections
+restart()        start the current level over
+
+Maze commands
+-------------
+A level may only allow some of these. The welcome line lists the ones
+you can use. Calling one that is locked raises an error.
+
+step()           walk one cell forward, in the direction you face
+left()           turn left
+right()          turn right
+toggle()         use what you are standing on, or what is in front of you
+safe()           True if the cell ahead is safe to enter right now
+notDone()        True until you reach the exit or the player is gone
+check('next')    same as safe()
+check('left')    True if the cell to your left is safe
+check('right')   True if the cell to your right is safe
+sleep(seconds)   pause
+
+Reach the glowing exit to win.
+After a win or a death, call restart() or level('name').
+
+The maze
+--------
+Walls block you. Empty floor is open.
+
+Keys: walk onto a key to pick it up. It is counted in the Items panel.
+Locked doors: stand facing the door and call toggle() while you hold a key.
+  One key opens one door. Without a key, toggle() tells you so.
+  step() into a closed door fails until it is open.
+
+Boxes: step() into a box pushes it one cell forward.
+  The cell beyond must be empty. A wall, door, or another box blocks the push.
+  Pushing a box into lava destroys the box and that lava.
+
+Buttons: stand on the button, face the way it points, then toggle().
+  That press opens every automatic door and starts numbered lava.
+  Doors stay open for a few seconds, then close. Standing in a closing
+  door crushes you. The button can be pressed again after it resets.
+
+Lava:
+  Orange lava is always deadly. step() onto it ends the run.
+  Numbered tiles 0 through 9 are timed. After a button press they take
+  turns becoming safe: tile n is passable around moment n, then deadly
+  again. Cross during its window and leave before it returns.
+  safe() and check() are False for deadly lava, walls, and closed doors.
+
+Code levels
+-----------
+Some levels have no maze. The console prints what to write.
+Define the function they ask for; the level calls it and prints the result.
+Example shapes you will meet:
+  hi        define hi() and it prints a greeting
+  nim       define a function (n, take). n is the pile. take(k) removes
+            k pieces (only a legal amount). You and the AI alternate.
+            Whoever takes the last piece wins.
+  secret    define a function that receives check(guess). check returns
+            1 if the secret is higher, -1 if lower, 0 if equal.
+            Return the secret number. You have a limited number of tries.
+
+Patterns
+--------
+Walk until you cannot:
+
+    while safe():
+        step()
+
+Keep going until the exit, turning when blocked:
+
+    while notDone():
+        if safe():
+            step()
+        else:
+            left()
+
+Give a sequence a name so you can reuse it:
+
+    def forward(n):
+        for i in range(n):
+            step()
+""")
 ${Object.entries(predefined)
   .map(([k, v]) => `${v}\n${k}.code = ${JSON.stringify(v)}`)
   .join("\n")}
